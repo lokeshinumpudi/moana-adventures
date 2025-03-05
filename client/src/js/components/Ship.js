@@ -6,8 +6,8 @@ export class Ship {
   constructor(inputManager = null) {
     // Ship properties
     this.speed = 0;
-    this.maxSpeed = 105;
-    this.acceleration = 20;
+    this.maxSpeed = 75;
+    this.acceleration = 6;
     this.rotationSpeed = 2;
     this.collisionRadius = 3.5;
     this.velocity = new THREE.Vector3();
@@ -51,6 +51,12 @@ export class Ship {
       left: null,
       right: null
     };
+
+    // Initialize notification system
+    this.notifications = [];
+    this.notificationContainer = document.createElement('div');
+    this.notificationContainer.id = 'notification-container';
+    document.body.appendChild(this.notificationContainer);
   }
   
   async init() {
@@ -225,7 +231,7 @@ export class Ship {
       this.character.position.y = 1.7 + Math.sin(Date.now() * 0.002) * 0.05;
       
       // Animate arms when moving
-      if (input.isMovingForward()) {
+      if (input.isMovingForward() || input.isMovingBackward()) {
         const armSpeed = 2;
         this.character.children.forEach(child => {
           // Find arm meshes
@@ -247,27 +253,26 @@ export class Ship {
     }
     
     // Handle forward/backward movement
-    let speedChange = 0;
+    let targetSpeed = 0;
+    
     if (input.isMovingForward()) {
-      speedChange = this.acceleration * delta;
-    }
-    if (input.isMovingBackward()) {
-      speedChange = -this.acceleration * delta;
+      targetSpeed = this.maxSpeed;
+    } else if (input.isMovingBackward()) {
+      targetSpeed = -this.maxSpeed * 0.5; // Half speed when moving backward
     }
     
-    // Update speed
-    this.speed = Math.max(0, Math.min(this.maxSpeed, this.speed + speedChange));
+    // Smoothly interpolate current speed to target speed
+    this.speed = THREE.MathUtils.lerp(this.speed, targetSpeed, this.acceleration * delta);
     
-    // Apply velocity based on ship's orientation
-    if (this.speed > 0 || speedChange < 0) {
-      // Calculate forward direction
-      this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+    // Apply movement
+    if (Math.abs(this.speed) > 0.01) {
+      // Get forward direction from ship's rotation
+      const forward = new THREE.Vector3(0, 0, 1);
+      forward.applyQuaternion(this.mesh.quaternion);
       
-      // Apply velocity
-      this.velocity.copy(this.direction).multiplyScalar(this.speed);
-      
-      // Apply to mesh position
-      this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
+      // Update position
+      this.mesh.position.x += forward.x * this.speed * delta;
+      this.mesh.position.z += forward.z * this.speed * delta;
     }
     
     // Apply physics - add a little drag
@@ -548,5 +553,56 @@ export class Ship {
     group.add(addGunMount(this.frontGunPosition));
 
     return group;
+  }
+
+  showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `game-notification type-${type}`;
+
+    // Add icon
+    const icon = document.createElement('span');
+    icon.className = 'notification-icon';
+    
+    switch(type) {
+      case 'join':
+        icon.textContent = '👋';
+        break;
+      case 'death':
+        icon.textContent = '💀';
+        break;
+      case 'hit':
+        icon.textContent = '🎯';
+        break;
+      case 'respawn':
+        icon.textContent = '✨';
+        break;
+      default:
+        icon.textContent = 'ℹ️';
+    }
+
+    // Add message
+    const text = document.createElement('span');
+    text.className = 'notification-text';
+    text.textContent = message;
+
+    // Assemble notification
+    notification.appendChild(icon);
+    notification.appendChild(text);
+    this.notificationContainer.appendChild(notification);
+    this.notifications.push(notification);
+
+    // Remove after delay
+    setTimeout(() => {
+      notification.classList.add('removing');
+      setTimeout(() => {
+        if (notification.parentNode === this.notificationContainer) {
+          this.notificationContainer.removeChild(notification);
+        }
+        const index = this.notifications.indexOf(notification);
+        if (index > -1) {
+          this.notifications.splice(index, 1);
+        }
+      }, 300);
+    }, type === 'join' || type === 'death' ? 5000 : 3000);
   }
 } 

@@ -38,9 +38,36 @@ export class Game {
     this.lastProjectileUpdateTime = 0;
     this.collisionCheckInterval = 100;
     this.lastCollisionCheckTime = 0;
+
+    // Initialize notification system
+    this.notifications = [];
+    this.notificationContainer = document.createElement('div');
+    this.notificationContainer.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 10px;
+      width: 350px;
+    `;
+    document.body.appendChild(this.notificationContainer);
+    
+    // Add bounce animation style
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+      }
+    `;
+    document.head.appendChild(style);
     
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    
   }
   
   init() {
@@ -55,6 +82,23 @@ export class Game {
         // Set up socket manager for multiplayer
         this.socketManager = new SocketManager(this);
         
+        // Add socket event listeners for notifications
+        this.socketManager.socket.on('player:join', (data) => {
+          this.showNotification(`${data.username || 'A new player'} joined the game! 🎮`, 'join');
+        });
+
+        this.socketManager.socket.on('player:death', (data) => {
+          if (data.id !== this.socketManager.socket.id) {
+            this.showNotification(`${data.username || 'A player'} was defeated! ⚔️`, 'death');
+          }
+        });
+
+        this.socketManager.socket.on('player:respawn', (data) => {
+          if (data.id !== this.socketManager.socket.id) {
+            this.showNotification(`${data.username || 'A player'} respawned! 🌟`, 'respawn');
+          }
+        });
+
         // Create game components
         this.createComponents().then(() => {
           // Initialize particle system
@@ -255,72 +299,117 @@ export class Game {
     this.createPickups();
   }
   
+  createPickupMesh(pickupData) {
+    // Create anime-style pickup mesh
+    const group = new THREE.Group();
+    
+    // Main gem shape
+    const gemGeometry = new THREE.OctahedronGeometry(1, 0);
+    const gemMaterial = new THREE.MeshPhongMaterial({
+      color: pickupData.color,
+      emissive: pickupData.emissive,
+      emissiveIntensity: 0.5,
+      shininess: 100,
+      transparent: true,
+      opacity: 0.9
+    });
+    
+    const gem = new THREE.Mesh(gemGeometry, gemMaterial);
+    gem.scale.multiplyScalar(pickupData.scale || 1.0);
+    group.add(gem);
+
+    // Add glow effect
+    const glowGeometry = new THREE.OctahedronGeometry(1.2, 0);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: pickupData.emissive,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending
+    });
+    
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    glow.scale.multiplyScalar(pickupData.scale || 1.0);
+    group.add(glow);
+
+    // Store pickup data
+    group.userData = {
+      type: pickupData.type,
+      effect: pickupData.effect,
+      collisionRadius: 2.0
+    };
+
+    return {
+      mesh: group,
+      type: pickupData.type,
+      effect: pickupData.effect,
+      collisionRadius: 2.0
+    };
+  }
+  
   createPickups() {
     // Initialize pickups array
     this.pickups = [];
     
-    // Create different types of pickups
-    const pickupTypes = ['health', 'ammo', 'speed', 'shield'];
-    const pickupPositions = Array(20).fill().map(() => ({
-      x: (Math.random() - 0.5) * 400,
-      z: (Math.random() - 0.5) * 400,
-      type: pickupTypes[Math.floor(Math.random() * pickupTypes.length)]
-    }));
-    
-    // Import Pickup class if needed
-    import('./components/Pickup.js').then(module => {
-      const Pickup = module.Pickup;
-      
-      pickupPositions.forEach(pos => {
-        const pickup = new Pickup(pos.type);
-        pickup.init().then(() => {
-          pickup.mesh.position.set(pos.x, 1, pos.z);
-          this.scene.add(pickup.mesh);
-          this.pickups.push(pickup);
-        });
-      });
-    }).catch(error => {
-      console.error("Failed to load Pickup class:", error);
-      // Fallback to using basic objects if Pickup class doesn't exist
-      this.createBasicPickups(pickupPositions);
-    });
-  }
-  
-  createBasicPickups(positions) {
-    // Create simple pickups if the Pickup class isn't available
-    positions.forEach(pos => {
-      const geometry = new THREE.SphereGeometry(1, 8, 8);
-      let material;
-      
-      switch(pos.type) {
-        case 'health':
-          material = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 });
-          break;
-        case 'ammo':
-          material = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 });
-          break;
-        case 'speed':
-          material = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 });
-          break;
-        case 'shield':
-          material = new THREE.MeshStandardMaterial({ color: 0x0000ff, emissive: 0x0000ff, emissiveIntensity: 0.5 });
-          break;
-        default:
-          material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    // Enhanced pickup types with better effects
+    const pickupTypes = [
+      {
+        type: 'health',
+        color: 0xff4444,
+        emissive: 0xff0000,
+        scale: 1.2,
+        effect: (ship) => {
+          ship.health = Math.min(100, ship.health + 40);
+          this.particleSystem.createHealEffect(ship.mesh.position);
+        }
+      },
+      {
+        type: 'speed',
+        color: 0x44ff44,
+        emissive: 0x00ff00,
+        scale: 1.0,
+        effect: (ship) => {
+          ship.speedBoost = 2.0;
+          ship.speedBoostTime = Date.now() + 15000;
+          this.particleSystem.createSpeedEffect(ship.mesh.position);
+        }
+      },
+      {
+        type: 'shield',
+        color: 0x4444ff,
+        emissive: 0x0000ff,
+        scale: 1.3,
+        effect: (ship) => {
+          ship.shield = 100;
+          ship.shieldTime = Date.now() + 20000;
+          this.particleSystem.createShieldEffect(ship.mesh.position);
+        }
+      },
+      {
+        type: 'power',
+        color: 0xffff44,
+        emissive: 0xffff00,
+        scale: 1.1,
+        effect: (ship) => {
+          ship.powerBoost = 2.0;
+          ship.powerBoostTime = Date.now() + 10000;
+          this.particleSystem.createPowerEffect(ship.mesh.position);
+        }
       }
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(pos.x, 1, pos.z);
-      mesh.userData.pickupType = pos.type;
-      mesh.userData.isPickup = true;
-      
-      this.scene.add(mesh);
-      this.pickups.push({
-        mesh: mesh,
-        type: pos.type,
-        collisionRadius: 2
-      });
-    });
+    ];
+
+    // Create pickups at random positions
+    for (let i = 0; i < 20; i++) {
+      const pickupType = pickupTypes[Math.floor(Math.random() * pickupTypes.length)];
+      const position = {
+        x: (Math.random() - 0.5) * 400,
+        z: (Math.random() - 0.5) * 400
+      };
+
+      const pickup = this.createPickupMesh(pickupType);
+      pickup.mesh.position.set(position.x, 2, position.z); // Raised higher for better visibility
+      this.scene.add(pickup.mesh);
+      this.pickups.push(pickup);
+    }
   }
   
   createProjectile(position, direction, isMachineGun) {
@@ -668,6 +757,12 @@ export class Game {
   update(delta) {
     // Update player ship if available
     if (this.ship) {
+      // Check if player died
+      if (this.ship.health <= 0) {
+        this.resetPlayer();
+        return;
+      }
+
       this.ship.update(delta, this.inputManager);
       
       // Update camera to follow ship
@@ -872,5 +967,120 @@ export class Game {
     // The server will be authoritative about that and notify us
     
     return false;
+  }
+  
+  resetPlayer() {
+    // Reset ship position to start
+    this.ship.mesh.position.set(0, 0, 0);
+    this.ship.mesh.rotation.set(0, 0, 0);
+    this.ship.speed = 0;
+    this.ship.health = 100;
+    
+    // Reset score
+    this.score = 0;
+    
+    // Create respawn effect
+    if (this.particleSystem) {
+      this.particleSystem.createExplosion(this.ship.mesh.position, {
+        count: 30,
+        color: 0x00ff00,
+        size: 0.5,
+        duration: 1000
+      });
+    }
+    
+    // Show local notification
+    this.showNotification('You respawned! Ready for action! 🚀', 'respawn');
+    
+    // Notify other players through socket
+    if (this.socketManager) {
+      this.socketManager.socket.emit('player_respawn', {
+        id: this.socketManager.socket.id
+      });
+    }
+  }
+
+  showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      font-family: 'Arial', sans-serif;
+      font-size: ${type === 'join' || type === 'death' ? '18px' : '16px'};
+      transform: translateY(100%);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      max-width: 350px;
+      ${type === 'join' || type === 'death' ? 'font-weight: bold;' : ''}
+    `;
+
+    // Add icon based on type
+    const icon = document.createElement('span');
+    icon.style.cssText = `
+      margin-right: 12px;
+      font-size: ${type === 'join' || type === 'death' ? '28px' : '20px'};
+      animation: bounce 1s ease infinite;
+      line-height: 1;
+    `;
+    
+    switch(type) {
+      case 'join':
+        icon.textContent = '🎮';
+        notification.style.borderLeft = '6px solid #4CAF50';
+        notification.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
+        break;
+      case 'death':
+        icon.textContent = '💀';
+        notification.style.borderLeft = '6px solid #f44336';
+        notification.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
+        break;
+      case 'respawn':
+        icon.textContent = '✨';
+        notification.style.borderLeft = '6px solid #2196F3';
+        notification.style.backgroundColor = 'rgba(33, 150, 243, 0.25)';
+        break;
+      default:
+        icon.textContent = 'ℹ️';
+        notification.style.borderLeft = '6px solid #9E9E9E';
+    }
+    notification.appendChild(icon);
+
+    const text = document.createElement('span');
+    text.textContent = message;
+    text.style.wordBreak = 'break-word';
+    notification.appendChild(text);
+
+    this.notificationContainer.appendChild(notification);
+    this.notifications.push(notification);
+
+    // Force a reflow to ensure the animation works
+    notification.offsetHeight;
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      notification.style.transform = 'translateY(0)';
+      notification.style.opacity = '1';
+    });
+
+    // Remove after delay
+    setTimeout(() => {
+      notification.style.transform = 'translateY(100%)';
+      notification.style.opacity = '0';
+      setTimeout(() => {
+        notification.remove();
+        const index = this.notifications.indexOf(notification);
+        if (index > -1) {
+          this.notifications.splice(index, 1);
+        }
+      }, 300);
+    }, type === 'join' || type === 'death' ? 5000 : 3000);
   }
 } 

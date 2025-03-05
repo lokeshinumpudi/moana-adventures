@@ -415,6 +415,127 @@ export class ParticleSystem {
     });
   }
   
+  createHealEffect(position) {
+    // Create healing circles effect
+    const count = 20;
+    const radius = 3;
+    
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      
+      const particle = this.createParticle(
+        new THREE.Vector3(position.x + x, position.y, position.z + z),
+        {
+          size: 'medium',
+          material: new THREE.MeshBasicMaterial({
+            color: 0xff4444,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+          }),
+          velocity: new THREE.Vector3(0, 0.5, 0),
+          lifespan: 1000,
+          fadeRate: 0.02,
+          scaleRate: 1.02
+        }
+      );
+    }
+  }
+  
+  createSpeedEffect(position) {
+    // Create speed lines effect
+    const count = 15;
+    
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.random() * Math.PI * 2);
+      const radius = 2 + Math.random() * 2;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      
+      const particle = this.createParticle(
+        new THREE.Vector3(position.x + x, position.y, position.z + z),
+        {
+          size: 'small',
+          material: new THREE.MeshBasicMaterial({
+            color: 0x44ff44,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+          }),
+          velocity: new THREE.Vector3(x * 0.5, 0.2, z * 0.5),
+          lifespan: 800,
+          fadeRate: 0.03,
+          scaleRate: 0.97
+        }
+      );
+    }
+  }
+  
+  createShieldEffect(position) {
+    // Create shield bubble effect
+    const count = 30;
+    const radius = 4;
+    
+    for (let i = 0; i < count; i++) {
+      const phi = Math.acos(-1 + (2 * i) / count);
+      const theta = Math.sqrt(count * Math.PI) * phi;
+      
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = radius * Math.sin(phi) * Math.sin(theta);
+      const z = radius * Math.cos(phi);
+      
+      const particle = this.createParticle(
+        new THREE.Vector3(position.x + x, position.y + y, position.z + z),
+        {
+          size: 'small',
+          material: new THREE.MeshBasicMaterial({
+            color: 0x4444ff,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending
+          }),
+          velocity: new THREE.Vector3(x * 0.1, y * 0.1, z * 0.1),
+          lifespan: 1200,
+          fadeRate: 0.01,
+          scaleRate: 1.01
+        }
+      );
+    }
+  }
+  
+  createPowerEffect(position) {
+    // Create power surge effect
+    const count = 25;
+    
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const height = Math.random() * 4;
+      
+      const particle = this.createParticle(
+        new THREE.Vector3(position.x, position.y + height, position.z),
+        {
+          size: 'medium',
+          material: new THREE.MeshBasicMaterial({
+            color: 0xffff44,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+          }),
+          velocity: new THREE.Vector3(
+            Math.cos(angle) * 2,
+            1 + Math.random(),
+            Math.sin(angle) * 2
+          ),
+          lifespan: 1000,
+          fadeRate: 0.02,
+          scaleRate: 0.98
+        }
+      );
+    }
+  }
+  
   update(delta) {
     // Calculate elapsed time since last frame
     const now = Date.now();
