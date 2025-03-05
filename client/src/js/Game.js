@@ -41,6 +41,9 @@ export class Game {
     
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    
+    // Initialize HUD
+    this.hud = new HUD(this);
   }
   
   init() {

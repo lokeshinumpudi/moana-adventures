@@ -286,17 +286,23 @@ export class Ship {
     this.mesh.rotation.x = pitchAngle;
   }
   
-  takeDamage(amount) {
-    // Make sure health exists
-    if (this.health === undefined) {
-      this.health = 100;
+  takeDamage(damage) {
+    this.health = Math.max(0, this.health - damage);
+    
+    // Store original color if not already stored
+    if (!this.originalColor) {
+      this.originalColor = this.hull.material.color.clone();
     }
     
-    // Reduce health
-    this.health = Math.max(0, this.health - amount);
+    // Flash red
+    this.hull.material.color.setHex(0xff0000);
     
-    // Return true if still alive
-    return this.health > 0;
+    // Revert back to original color after 200ms
+    setTimeout(() => {
+      this.hull.material.color.copy(this.originalColor);
+    }, 200);
+    
+    return this.health <= 0;
   }
   
   fireProjectile(side) {

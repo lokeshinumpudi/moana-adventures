@@ -1,204 +1,93 @@
 export class HUD {
   constructor(game) {
     this.game = game;
+    
+    // Create HUD container
     this.container = document.createElement('div');
-    this.container.id = 'hud-container';
-    document.body.appendChild(this.container);
+    this.container.style.position = 'absolute';
+    this.container.style.top = '0';
+    this.container.style.left = '0';
+    this.container.style.width = '100%';
+    this.container.style.pointerEvents = 'none';
     
-    this.createElements();
-    this.lastRadarUpdate = 0;
-    this.radarUpdateInterval = 100; // Update radar every 100ms
-  }
-  
-  createElements() {
-    // Mini-map
-    this.miniMapContainer = document.createElement('div');
-    this.miniMapContainer.id = 'mini-map-container';
+    // Create score display
+    this.scoreDisplay = document.createElement('div');
+    this.scoreDisplay.style.position = 'absolute';
+    this.scoreDisplay.style.top = '20px';
+    this.scoreDisplay.style.left = '20px';
+    this.scoreDisplay.style.color = 'white';
+    this.scoreDisplay.style.fontSize = '24px';
+    this.scoreDisplay.style.fontFamily = 'Arial, sans-serif';
+    this.scoreDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+    this.container.appendChild(this.scoreDisplay);
     
-    // Add radar scan line
-    this.radarLine = document.createElement('div');
-    this.radarLine.className = 'radar-line';
-    this.miniMapContainer.appendChild(this.radarLine);
-    
-    // Container for enemy blips
-    this.blipsContainer = document.createElement('div');
-    this.blipsContainer.id = 'blips-container';
-    this.miniMapContainer.appendChild(this.blipsContainer);
-    
-    this.container.appendChild(this.miniMapContainer);
-
-    // Player health
-    this.healthContainer = document.createElement('div');
-    this.healthContainer.id = 'health-container';
+    // Create health bar
     this.healthBar = document.createElement('div');
-    this.healthBar.id = 'health-bar';
-    this.healthText = document.createElement('div');
-    this.healthText.id = 'health-text';
-    this.healthContainer.appendChild(this.healthBar);
-    this.healthContainer.appendChild(this.healthText);
-    this.container.appendChild(this.healthContainer);
+    this.healthBar.style.position = 'absolute';
+    this.healthBar.style.top = '60px';
+    this.healthBar.style.left = '20px';
+    this.healthBar.style.width = '200px';
+    this.healthBar.style.height = '20px';
+    this.healthBar.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    this.healthBar.style.border = '2px solid white';
+    this.healthBar.style.borderRadius = '10px';
+    this.healthBar.style.overflow = 'hidden';
     
-    // Score
-    this.scoreContainer = document.createElement('div');
-    this.scoreContainer.id = 'score-container';
-    this.scoreText = document.createElement('div');
-    this.scoreText.id = 'score-text';
-    this.scoreContainer.appendChild(this.scoreText);
-    this.container.appendChild(this.scoreContainer);
-    
-    // Online count instead of player list
-    this.onlineCount = document.createElement('div');
-    this.onlineCount.id = 'online-count';
-    this.container.appendChild(this.onlineCount);
-    
-    // Weapon cooldowns
-    this.cooldownContainer = document.createElement('div');
-    this.cooldownContainer.id = 'cooldown-container';
-    
-    // Left cannon
-    this.leftCooldown = document.createElement('div');
-    this.leftCooldown.className = 'cooldown-indicator left';
-    this.cooldownContainer.appendChild(this.leftCooldown);
-    
-    // Right cannon
-    this.rightCooldown = document.createElement('div');
-    this.rightCooldown.className = 'cooldown-indicator right';
-    this.cooldownContainer.appendChild(this.rightCooldown);
-    
-    this.container.appendChild(this.cooldownContainer);
-  }
-  
-  updateMiniMap() {
-    const now = Date.now();
-    if (now - this.lastRadarUpdate < this.radarUpdateInterval) return;
-    this.lastRadarUpdate = now;
+    this.healthFill = document.createElement('div');
+    this.healthFill.style.width = '100%';
+    this.healthFill.style.height = '100%';
+    this.healthFill.style.backgroundColor = '#4CAF50';
+    this.healthFill.style.transition = 'width 0.2s ease-out';
+    this.healthBar.appendChild(this.healthFill);
+    this.container.appendChild(this.healthBar);
 
-    // Clear existing blips
-    this.blipsContainer.innerHTML = '';
+    // Create FPS counter
+    this.fpsDisplay = document.createElement('div');
+    this.fpsDisplay.style.position = 'absolute';
+    this.fpsDisplay.style.top = '20px';
+    this.fpsDisplay.style.right = '20px';
+    this.fpsDisplay.style.color = 'white';
+    this.fpsDisplay.style.fontSize = '16px';
+    this.fpsDisplay.style.fontFamily = 'monospace';
+    this.fpsDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+    this.container.appendChild(this.fpsDisplay);
 
-    // Add player blip
-    if (this.game.ship) {
-      const playerBlip = document.createElement('div');
-      playerBlip.className = 'player-blip';
-      playerBlip.style.left = '50%';
-      playerBlip.style.top = '50%';
-      this.blipsContainer.appendChild(playerBlip);
-    }
-
-    // Add enemy blips
-    if (this.game.socketManager && this.game.socketManager.otherPlayers) {
-      this.game.socketManager.otherPlayers.forEach(player => {
-        if (!player.ship || !this.game.ship) return;
-
-        // Calculate relative position
-        const relativePos = player.ship.mesh.position.clone()
-          .sub(this.game.ship.mesh.position);
-
-        // Convert world position to radar coordinates
-        const radarX = (relativePos.x / 200 * 100) + 50;
-        const radarZ = (relativePos.z / 200 * 100) + 50;
-
-        // Only show if within radar range
-        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
-          const enemyBlip = document.createElement('div');
-          enemyBlip.className = 'enemy-blip';
-          enemyBlip.style.left = `${radarX}%`;
-          enemyBlip.style.top = `${radarZ}%`;
-          this.blipsContainer.appendChild(enemyBlip);
-        }
-      });
-    }
+    // FPS calculation variables
+    this.frameCount = 0;
+    this.lastFpsUpdate = 0;
+    this.fps = 0;
     
-    // Add obstacle blips
-    if (this.game.obstacles && this.game.obstacles.length > 0) {
-      this.game.obstacles.forEach(obstacle => {
-        if (!obstacle.mesh || !this.game.ship) return;
-        
-        // Calculate relative position
-        const relativePos = obstacle.mesh.position.clone()
-          .sub(this.game.ship.mesh.position);
-          
-        // Convert world position to radar coordinates
-        const radarX = (relativePos.x / 200 * 100) + 50;
-        const radarZ = (relativePos.z / 200 * 100) + 50;
-        
-        // Only show if within radar range
-        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
-          const obstacleBlip = document.createElement('div');
-          obstacleBlip.className = 'obstacle-blip';
-          obstacleBlip.style.left = `${radarX}%`;
-          obstacleBlip.style.top = `${radarZ}%`;
-          this.blipsContainer.appendChild(obstacleBlip);
-        }
-      });
-    }
-    
-    // Also add buoys to the radar
-    if (this.game.buoys && this.game.buoys.length > 0) {
-      this.game.buoys.forEach(buoy => {
-        if (!buoy.mesh || !this.game.ship) return;
-        
-        // Calculate relative position
-        const relativePos = buoy.mesh.position.clone()
-          .sub(this.game.ship.mesh.position);
-          
-        // Convert world position to radar coordinates
-        const radarX = (relativePos.x / 200 * 100) + 50;
-        const radarZ = (relativePos.z / 200 * 100) + 50;
-        
-        // Only show if within radar range
-        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
-          const buoyBlip = document.createElement('div');
-          buoyBlip.className = 'obstacle-blip';
-          buoyBlip.style.backgroundColor = 'var(--secondary-color)';
-          buoyBlip.style.left = `${radarX}%`;
-          buoyBlip.style.top = `${radarZ}%`;
-          this.blipsContainer.appendChild(buoyBlip);
-        }
-      });
-    }
+    // Add to game container
+    this.game.container.appendChild(this.container);
   }
   
   update() {
-    // Update mini-map
-    this.updateMiniMap();
-
-    // Update health
+    // Update score
+    this.scoreDisplay.textContent = `Score: ${this.game.score}`;
+    
+    // Update health bar
     if (this.game.ship) {
-      const health = this.game.ship.health || 100;
-      this.healthBar.style.width = `${health}%`;
-      this.healthText.textContent = `Health: ${Math.round(health)}%`;
+      const health = this.game.ship.health || 0;
+      this.healthFill.style.width = `${health}%`;
       
       // Change color based on health
       if (health > 60) {
-        this.healthBar.style.backgroundColor = 'var(--health-color)';
+        this.healthFill.style.backgroundColor = '#4CAF50'; // Green
       } else if (health > 30) {
-        this.healthBar.style.backgroundColor = 'var(--warning-color)';
+        this.healthFill.style.backgroundColor = '#FFC107'; // Yellow
       } else {
-        this.healthBar.style.backgroundColor = 'var(--danger-color)';
+        this.healthFill.style.backgroundColor = '#F44336'; // Red
       }
     }
-    
-    // Update online count - only show other players
-    const onlineCount = this.game.socketManager ? this.game.socketManager.otherPlayers.size : 0;
-    this.onlineCount.textContent = `Online: ${onlineCount + 1}`; // +1 to include the player
-    
-    // Update score
-    const score = this.game.score || 0;
-    this.scoreText.textContent = `Score: ${score}`;
-    
-    // Update cooldowns
-    const now = Date.now();
-    const inputManager = this.game.inputManager;
-    
-    if (inputManager) {
-      // Left cannon cooldown
-      const leftProgress = Math.min(1, (now - (inputManager.lastLeftCannonFire || 0)) / (inputManager.cannonCooldown || 1000));
-      this.leftCooldown.style.height = `${leftProgress * 100}%`;
-      
-      // Right cannon cooldown
-      const rightProgress = Math.min(1, (now - (inputManager.lastRightCannonFire || 0)) / (inputManager.cannonCooldown || 1000));
-      this.rightCooldown.style.height = `${rightProgress * 100}%`;
+
+    // Update FPS counter
+    this.frameCount++;
+    const now = performance.now();
+    if (now - this.lastFpsUpdate >= 1000) {
+      this.fps = Math.round((this.frameCount * 1000) / (now - this.lastFpsUpdate));
+      this.fpsDisplay.textContent = `FPS: ${this.fps}`;
+      this.frameCount = 0;
+      this.lastFpsUpdate = now;
     }
   }
 } 
