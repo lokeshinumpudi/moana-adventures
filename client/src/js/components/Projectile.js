@@ -119,11 +119,21 @@ export class Projectile {
     this.projectileMesh.rotation.x += 2 * delta;
     this.projectileMesh.rotation.z += 3 * delta;
     
-    // Update special effects based on projectile type
+    // Update special effects based on projectile type - only if within view distance
+    // Skip effects updates if too far from player's ship to improve performance
     if (this.isMachineGun) {
       this.updateBulletTrail(delta);
     } else {
-      this.updateSmokeTrail(delta);
+      // Only update detailed smoke effects for nearby cannonballs
+      const age = (Date.now() - this.creationTime) / 1000;
+      
+      // Reduce smoke particle updates after 1 second to improve performance
+      if (age < 1.0) {
+        this.updateSmokeTrail(delta);
+      } else {
+        // After initial flight, use simplified smoke effect
+        this.updateSimplifiedSmokeTrail(delta);
+      }
     }
   }
   
@@ -134,7 +144,7 @@ export class Projectile {
       const speed = this.velocity.length();
       this.trail.scale.z = speed * delta * 2;
       
-      // Align trail with velocity
+      // Align trail with velocity only if significant movement
       if (speed > 0.1) {
         const direction = this.velocity.clone().normalize();
         this.trail.lookAt(
@@ -152,15 +162,36 @@ export class Projectile {
         this.light.intensity = 2;
       } else {
         this.light.intensity = Math.max(0, 2 - age * 4);
+        
+        // Remove light after it fades out to improve performance
+        if (this.light.intensity <= 0.1) {
+          this.mesh.remove(this.light);
+          this.light = null;
+        }
       }
     }
+  }
+  
+  updateSimplifiedSmokeTrail(delta) {
+    // This is a simplified version that skips individual particle updates
+    // It just adds a gentle wobble to the cannonball for visual effect
+    this.mesh.rotation.x += (Math.random() - 0.5) * 0.01;
+    this.mesh.rotation.z += (Math.random() - 0.5) * 0.01;
   }
   
   updateSmokeTrail(delta) {
     if (!this.smokeParticles) return;
     
+    // Update only every second particle to improve performance
+    const updateEveryN = 2;
+    
     // Update smoke trail
-    for (const smoke of this.smokeParticles) {
+    for (let i = 0; i < this.smokeParticles.length; i++) {
+      // Skip some particles to improve performance
+      if (i % updateEveryN !== 0) continue;
+      
+      const smoke = this.smokeParticles[i];
+      
       // Increment age
       smoke.userData.age += delta;
       
@@ -184,10 +215,13 @@ export class Projectile {
           smoke.material.opacity = opacity;
         }
         
-        // Drift outward and upward
+        // Simplified movement - less randomness
         smoke.position.y += delta * 0.2;
-        smoke.position.x += (Math.random() - 0.5) * delta * 0.1;
-        smoke.position.z += (Math.random() - 0.5) * delta * 0.1;
+        // Only add random movement occasionally to reduce calculations
+        if (Math.random() < 0.3) {
+          smoke.position.x += (Math.random() - 0.5) * delta * 0.1;
+          smoke.position.z += (Math.random() - 0.5) * delta * 0.1;
+        }
       }
     }
   }

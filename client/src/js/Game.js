@@ -13,41 +13,30 @@ import { HUD } from './components/HUD.js';
 import { Projectile } from './components/Projectile.js';
 
 export class Game {
-  constructor() {
-    // Game state
+  constructor(container) {
+    // Store container reference
+    this.container = container;
+    
+    // Set up game state
     this.isRunning = false;
-    this.isPaused = false;
-    this.score = 0;
+    this.lastTime = 0;
     this.projectiles = [];
-    this.otherProjectiles = [];
     this.obstacles = [];
     this.buoys = [];
-    this.lastTime = 0;
     
-    // Performance monitoring
-    this.fpsCounter = document.createElement('div');
-    this.fpsCounter.id = 'fps-counter';
-    document.body.appendChild(this.fpsCounter);
-    this.frames = 0;
-    this.lastFpsUpdate = 0;
+    // Set up cooldowns for firing
+    this.lastCannonFireTime = 0;
+    this.cannonCooldown = 300; // Reduced from 1000ms to 300ms
+    this.lastMachineGunFireTime = 0;
+    this.machineGunCooldown = 50; // Reduced from 100ms to 50ms
     
-    // Projectile settings
-    this.maxProjectiles = 50; // Maximum active projectiles
-    this.projectileCleanupInterval = 5000; // Clean up projectiles every 5 seconds
-    this.lastCleanupTime = 0;
+    // Set up performance optimization properties
+    this.lastProjectileUpdateTime = 0;
+    this.collisionCheckInterval = 100; // ms between collision checks
+    this.lastCollisionCheckTime = 0;
     
-    // Machine gun settings
-    this.machineGunCooldown = 150; // milliseconds between shots
-    this.leftMachineGunTime = 0;
-    this.rightMachineGunTime = 0;
-    
-    // Collision optimization
-    this.collisionCheckInterval = 100; // Check collisions every 100ms
-    this.lastCollisionCheck = 0;
-    this.lastPickupCheck = 0;
-    
-    // Initialize HUD
-    this.hud = new HUD(this);
+    // Handle window resize
+    window.addEventListener('resize', this.onWindowResize.bind(this));
   }
   
   init() {
@@ -56,13 +45,24 @@ export class Game {
         // Set up Three.js scene
         this.setupScene();
         
+        // Set up input manager first
+        this.inputManager = new InputManager(this);
+        
+        // Set up socket manager for multiplayer
+        this.socketManager = new SocketManager(this);
+        
         // Create game components
         this.createComponents().then(() => {
-          // Set up input manager
-          this.inputManager = new InputManager(this);
+          // Initialize particle system
+          this.particleSystem = new ParticleSystem(this.scene);
           
-          // Set up socket manager for multiplayer
-          this.socketManager = new SocketManager(this);
+          // Initialize HUD
+          this.hud = new HUD(this);
+          
+          // Start the game loop
+          this.isRunning = true;
+          this.lastTime = Date.now();
+          this.animate();
           
           resolve();
         });
@@ -94,7 +94,9 @@ export class Game {
     this.renderer.setClearColor(0x87ceeb);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(this.renderer.domElement);
+    
+    // Add renderer to container
+    this.container.appendChild(this.renderer.domElement);
     
     // Add lights
     this.addLights();
@@ -106,9 +108,6 @@ export class Game {
     this.controls.maxPolarAngle = Math.PI / 2 - 0.1;
     this.controls.minDistance = 10;
     this.controls.maxDistance = 100;
-    
-    // Handle window resize
-    window.addEventListener('resize', () => this.onWindowResize());
   }
   
   addLights() {
@@ -158,7 +157,7 @@ export class Game {
         
         // Create ship and character
         new Promise(resolve => {
-          this.ship = new Ship();
+          this.ship = new Ship(this.inputManager);
           this.ship.init().then(() => {
             this.scene.add(this.ship.mesh);
             
@@ -182,9 +181,6 @@ export class Game {
           resolve();
         })
       ]).then(() => {
-        // Create particle system
-        this.particleSystem = new ParticleSystem(this.scene);
-        
         // All components loaded
         this.isRunning = true;
         resolve();
@@ -323,80 +319,95 @@ export class Game {
     });
   }
   
-  fireMachineGun(side) {
-    if (!this.ship || !this.ship.mesh) return;
+  createProjectile(position, direction, isMachineGun) {
+    const size = isMachineGun ? 0.1 : 0.3;
+    const geometry = new THREE.SphereGeometry(size, 8, 8);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: isMachineGun ? 0xFFC107 : 0x333333
+    });
     
-    const position = new THREE.Vector3();
-    const direction = new THREE.Vector3();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position);
     
-    // Get position from ship's matrix world
-    switch(side) {
-      case 'left':
-        position.copy(this.ship.leftGunPosition || new THREE.Vector3(-1, 0.5, 2));
-        direction.set(-1, 0, 0);
-        break;
-      case 'right':
-        position.copy(this.ship.rightGunPosition || new THREE.Vector3(1, 0.5, 2));
-        direction.set(1, 0, 0);
-        break;
-      case 'front':
-        position.copy(this.ship.frontGunPosition || new THREE.Vector3(0, 0.5, 3.5));
-        direction.set(0, 0, 1);
-        break;
-      default:
-        return;
-    }
-
-    // Transform position and direction to world space
-    position.applyMatrix4(this.ship.mesh.matrixWorld);
-    direction.applyQuaternion(this.ship.mesh.quaternion).normalize();
-
-    // Create projectile
-    const projectile = new Projectile(position, direction, 0.1, 50);
-
-    this.projectiles.push(projectile);
-    this.scene.add(projectile.mesh);
-
-    // Add muzzle flash particle effect
-    this.particleSystem.createMuzzleFlash(position);
+    return {
+      mesh,
+      velocity: direction.clone().multiplyScalar(isMachineGun ? 50 : 30),
+      creationTime: Date.now(),
+      damage: isMachineGun ? 1 : 10,
+      isMachineGun,
+      update(delta) {
+        this.velocity.y -= 9.8 * delta;
+        this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
+      }
+    };
   }
   
-  fireCannonball(side) {
-    if (!this.ship || !this.ship.mesh) return;
+  fireProjectile(side) {
+    if (!this.ship) return;
     
-    const position = new THREE.Vector3();
-    const direction = new THREE.Vector3();
+    const now = Date.now();
+    let isMachineGun = side.includes('machine');
+    let cannon;
+    let cooldown;
     
-    // Get position from ship's matrix world
     switch(side) {
       case 'left':
-        position.copy(this.ship.leftCannonPosition || new THREE.Vector3(-1.4, 1, -1.5));
-        direction.set(-1, 0, 0);
+        cannon = this.ship.leftCannon;
+        cooldown = now - this.lastCannonFireTime < this.cannonCooldown;
         break;
       case 'right':
-        position.copy(this.ship.rightCannonPosition || new THREE.Vector3(1.4, 1, -1.5));
-        direction.set(1, 0, 0);
+        cannon = this.ship.rightCannon;
+        cooldown = now - this.lastCannonFireTime < this.cannonCooldown;
+        break;
+      case 'left-machine':
+        cannon = this.ship.machineGuns.left;
+        cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
+        break;
+      case 'right-machine':
+        cannon = this.ship.machineGuns.right;
+        cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
+        break;
+      case 'front':
+        cannon = this.ship.machineGuns.front;
+        cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
         break;
       default:
         return;
     }
 
-    // Transform position and direction to world space
-    position.applyMatrix4(this.ship.mesh.matrixWorld);
-    direction.applyQuaternion(this.ship.mesh.quaternion).normalize();
+    if (cooldown || !cannon) return;
 
-    // Add some spread and arc to cannonballs
-    direction.y += 0.1; // Slight upward arc
-    direction.x += (Math.random() - 0.5) * 0.1; // Random spread
-    direction.z += (Math.random() - 0.5) * 0.1;
-    direction.normalize();
+    const startPosition = new THREE.Vector3();
+    cannon.getWorldPosition(startPosition);
 
-    // Create projectile
-    const projectile = new Projectile(position, direction, 0.5, 30);
+    const direction = new THREE.Vector3(0, 0, 1);
+    direction.applyQuaternion(cannon.getWorldQuaternion(new THREE.Quaternion()));
 
-    this.projectiles.push(projectile);
+    const projectile = this.createProjectile(startPosition, direction, isMachineGun);
     this.scene.add(projectile.mesh);
+    this.projectiles.push(projectile);
 
+    if (isMachineGun) {
+      this.lastMachineGunFireTime = now;
+    } else {
+      this.lastCannonFireTime = now;
+    }
+
+    // Register with socket manager
+    if (this.socketManager) {
+      console.log('Firing projectile:', {
+        position: startPosition,
+        direction: direction,
+        isMachineGun: isMachineGun
+      });
+      this.socketManager.fireProjectile(projectile);
+    }
+
+    return projectile;
+  }
+  
+  fireMachineGun(side) {
+    return this.fireProjectile(side + '-machine');
   }
   
   removeOldestProjectile() {
@@ -439,59 +450,100 @@ export class Game {
   checkCollisions() {
     const now = Date.now();
     
-    // Only check collisions every collisionCheckInterval
+    // Increase collision check interval to reduce CPU usage
     if (now - this.lastCollisionCheck < this.collisionCheckInterval) {
       return;
     }
     
     this.lastCollisionCheck = now;
     
+    // Skip collision checks if no projectiles
+    if (!this.projectiles.length && !this.ship) return;
+    
+    // Get ship position once
+    const shipPosition = this.ship.mesh.position;
+    
     // Check projectile collisions with other ships
-    this.socketManager.otherPlayers.forEach(player => {
-      this.projectiles.forEach(projectile => {
-        // Skip recently checked projectiles
-        if (now - projectile.lastCollisionCheck < this.collisionCheckInterval) {
-          return;
-        }
+    if (this.socketManager && this.socketManager.otherPlayers.size > 0) {
+      this.socketManager.otherPlayers.forEach(player => {
+        if (!player.ship || !player.ship.mesh) return;
         
-        projectile.lastCollisionCheck = now;
+        // Skip collision checks for distant players
+        const playerDistance = shipPosition.distanceTo(player.ship.mesh.position);
+        if (playerDistance > 100) return; // Skip if too far
         
-        // Calculate distance between projectile and other player's ship
-        const distance = projectile.mesh.position.distanceTo(player.ship.mesh.position);
+        // Check only a subset of projectiles per frame to reduce CPU load
+        const maxCheckCount = Math.min(10, this.projectiles.length);
         
-        // If distance is less than the sum of their radii, we have a collision
-        if (distance < (projectile.collisionRadius + player.ship.collisionRadius)) {
-          // Create hit effect
-          this.particleSystem.createHitEffect(projectile.mesh.position);
+        // Start from a different index each time to eventually check all projectiles
+        const startIndex = Math.floor(Math.random() * this.projectiles.length);
+        
+        for (let i = 0; i < maxCheckCount; i++) {
+          const index = (startIndex + i) % this.projectiles.length;
+          const projectile = this.projectiles[index];
           
-          // Remove projectile
-          this.scene.remove(projectile.mesh);
-          const index = this.projectiles.indexOf(projectile);
-          if (index > -1) {
-            this.projectiles.splice(index, 1);
+          // Skip recently checked projectiles
+          if (now - projectile.lastCollisionCheck < this.collisionCheckInterval * 2) {
+            continue;
           }
           
-          // Emit hit event to server
-          this.socketManager.socket.emit('player:hit', {
-            targetId: player.id,
-            damage: projectile.damage
-          });
+          projectile.lastCollisionCheck = now;
           
-          // Increment score
-          this.score += 10;
+          // Calculate distance between projectile and other player's ship
+          const distance = projectile.mesh.position.distanceTo(player.ship.mesh.position);
+          
+          // If distance is less than the sum of their radii, we have a collision
+          if (distance < (projectile.collisionRadius + player.ship.collisionRadius)) {
+            // Create hit effect
+            this.particleSystem.createHitEffect(projectile.mesh.position);
+            
+            // Remove projectile
+            this.scene.remove(projectile.mesh);
+            const projectileIndex = this.projectiles.indexOf(projectile);
+            if (projectileIndex > -1) {
+              this.projectiles.splice(projectileIndex, 1);
+            }
+            
+            // Emit hit event to server
+            this.socketManager.socket.emit('player:hit', {
+              targetId: player.id,
+              damage: projectile.damage || 10
+            });
+            
+            // Increment score
+            this.score += 10;
+          }
         }
       });
-    });
+    }
     
     // Check ship collisions with obstacles
-    this.obstacles.forEach(obstacle => {
-      const distance = this.ship.mesh.position.distanceTo(obstacle.mesh.position);
+    if (this.obstacles && this.obstacles.length > 0) {
+      // Check only nearby obstacles to improve performance
+      const maxCheckCount = Math.min(5, this.obstacles.length);
+      const startIndex = Math.floor(Math.random() * this.obstacles.length);
       
-      if (distance < (this.ship.collisionRadius + obstacle.collisionRadius)) {
-        // Apply collision physics
-        this.handleShipObstacleCollision(obstacle);
+      for (let i = 0; i < maxCheckCount; i++) {
+        const index = (startIndex + i) % this.obstacles.length;
+        const obstacle = this.obstacles[index];
+        
+        if (!obstacle.mesh) continue;
+        
+        // Skip distant obstacles
+        const obstacleDistance = shipPosition.distanceTo(obstacle.mesh.position);
+        if (obstacleDistance > 20) continue; // Only check obstacles within 20 units
+        
+        // Only check collision if we're close enough
+        if (obstacleDistance < (this.ship.collisionRadius + obstacle.collisionRadius) * 1.5) {
+          const distance = this.ship.mesh.position.distanceTo(obstacle.mesh.position);
+          
+          if (distance < (this.ship.collisionRadius + obstacle.collisionRadius)) {
+            // Apply collision physics
+            this.handleShipObstacleCollision(obstacle);
+          }
+        }
       }
-    });
+    }
   }
   
   handleShipObstacleCollision(obstacle) {
@@ -511,9 +563,8 @@ export class Game {
   }
   
   getGameState() {
-    // Return the game state for network transmission
-    return {
-      ship: {
+    const state = {
+      ship: this.ship ? {
         position: {
           x: this.ship.mesh.position.x,
           y: this.ship.mesh.position.y,
@@ -524,25 +575,12 @@ export class Game {
           y: this.ship.mesh.rotation.y,
           z: this.ship.mesh.rotation.z
         },
+        velocity: this.ship.velocity,
         health: this.ship.health
-      },
-      projectiles: this.projectiles.map(projectile => ({
-        id: projectile.id,
-        type: projectile.isMachineGun ? 'machineGun' : 'cannonball',
-        position: {
-          x: projectile.mesh.position.x,
-          y: projectile.mesh.position.y,
-          z: projectile.mesh.position.z
-        },
-        velocity: {
-          x: projectile.velocity.x,
-          y: projectile.velocity.y,
-          z: projectile.velocity.z
-        },
-        createdAt: projectile.creationTime
-      })),
-      score: this.score
+      } : null
     };
+    
+    return state;
   }
   
   start() {
@@ -587,8 +625,10 @@ export class Game {
     const delta = (now - this.lastTime) / 1000;
     this.lastTime = now;
     
-    // Update FPS counter
-    this.updateFpsCounter();
+    // Update controls
+    if (this.controls) {
+      this.controls.update();
+    }
     
     // Update game state
     this.update(delta);
@@ -610,87 +650,108 @@ export class Game {
   }
   
   update(delta) {
-    // Update controls
-    this.controls.update();
-    
-    // Process input
-    this.inputManager.update(delta);
-    
-    // Update socket manager for multiplayer
-    this.socketManager.update(delta);
-    
-    // Handle machine gun auto fire
-    if (this.inputManager.autoFiringLeft) {
-      this.fireMachineGun('left');
-    }
-    
-    if (this.inputManager.autoFiringRight) {
-      this.fireMachineGun('right');
-    }
-    
-    // Update ship
+    // Update player ship if available
     if (this.ship) {
       this.ship.update(delta, this.inputManager);
       
-      // Update character position based on ship
-      if (this.character) {
-        this.character.mesh.position.copy(this.ship.getCharacterPosition());
-        this.character.mesh.rotation.copy(this.ship.mesh.rotation);
-        this.character.update(delta);
-      }
-      
-      // Update camera position to follow ship
-      this.updateCameraPosition();
+      // Update camera to follow ship
+      this.updateCamera(delta);
     }
     
-    // Update ocean
-    if (this.ocean) {
-      this.ocean.update(delta);
-    }
-    
-    // Update projectiles
+    // Update all projectiles
     this.updateProjectiles(delta);
     
-    // Update buoys
-    this.buoys.forEach(buoy => {
-      buoy.update(delta);
-    });
-    
-    // Update pickups
-    if (this.pickups) {
-      this.pickups.forEach(pickup => {
-        if (pickup.update) pickup.update(delta);
-      });
+    // Update particle effects
+    if (this.particleSystem) {
+      this.particleSystem.update(delta);
     }
     
-    // Update particle system
-    this.particleSystem.update(delta);
-    
-    // Cleanup projectiles
-    this.cleanupProjectiles();
-    
-    // Check collisions
-    this.checkCollisions();
-    
-    // Check pickup collisions
-    this.checkPickupCollisions();
+    // Update other players through socket manager
+    if (this.socketManager) {
+      this.socketManager.update(delta);
+    }
     
     // Update HUD
-    this.hud.update();
+    if (this.hud) {
+      this.hud.update();
+    }
+    
+    // Check for collisions at a reduced rate
+    this.checkCollisions();
   }
   
-  updateCameraPosition() {
-    // Check if the camera needs to be updated
-    if (!this.ship || !this.camera) return;
+  updateCamera(delta) {
+    if (!this.ship || !this.controls) return;
     
-    // Set the target for the orbit controls to be the ship
-    this.controls.target.copy(this.ship.mesh.position);
+    // Get ship position
+    const shipPosition = this.ship.mesh.position.clone();
+    
+    // Calculate camera target position (behind and slightly above ship)
+    const cameraTargetPosition = shipPosition.clone();
+    cameraTargetPosition.y += 8; // Height above ship
+    cameraTargetPosition.z -= 20; // Distance behind ship
+    
+    // Smoothly interpolate camera position
+    this.camera.position.lerp(cameraTargetPosition, delta * 1.5);
+    
+    // Look at the ship
+    this.controls.target.copy(shipPosition);
+    this.controls.update();
   }
   
   updateProjectiles(delta) {
-    // Update own projectiles
-    this.projectiles.forEach(projectile => {
+    const gravity = 9.8;
+    const playerPosition = this.ship ? this.ship.mesh.position.clone() : new THREE.Vector3();
+    const maxVisibleDistance = 150;
+    
+    // Update player projectiles with local physics simulation
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const projectile = this.projectiles[i];
+      const age = (Date.now() - projectile.creationTime) / 1000;
+      
+      // Apply physics update
       projectile.update(delta);
+      
+      // Check if projectile is too old or out of bounds
+      if (age > 10 || 
+          projectile.mesh.position.y < -50 ||
+          Math.abs(projectile.mesh.position.x) > 500 ||
+          Math.abs(projectile.mesh.position.z) > 500) {
+        
+        // Remove from scene and array
+        this.scene.remove(projectile.mesh);
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+      
+      // Check if this projectile hits anything
+      this.checkProjectileCollisions(projectile);
+    }
+    
+    // Update other players' projectiles with same physics
+    this.socketManager?.otherPlayers.forEach(player => {
+      for (let i = player.projectiles.length - 1; i >= 0; i--) {
+        const projectile = player.projectiles[i];
+        const age = (Date.now() - projectile.creationTime) / 1000;
+        
+        // Skip update for projectiles that are too far away
+        const distanceToPlayer = projectile.mesh.position.distanceTo(playerPosition);
+        if (distanceToPlayer > maxVisibleDistance) {
+          continue;
+        }
+        
+        // Apply physics update
+        projectile.velocity.y -= gravity * delta;
+        projectile.mesh.position.x += projectile.velocity.x * delta;
+        projectile.mesh.position.y += projectile.velocity.y * delta;
+        projectile.mesh.position.z += projectile.velocity.z * delta;
+        
+        // Check if projectile is too old
+        if (age > 10 || projectile.mesh.position.y < -50) {
+          this.scene.remove(projectile.mesh);
+          player.projectiles.splice(i, 1);
+        }
+      }
     });
   }
   
@@ -750,5 +811,45 @@ export class Game {
         // (Add sound logic here if you have a sound system)
       }
     }
+  }
+  
+  checkProjectileCollisions(projectile) {
+    // Skip if no ship or projectile
+    if (!this.ship || !projectile || !projectile.mesh) return;
+    
+    // Get positions
+    const projectilePos = projectile.mesh.position;
+    
+    // Check collision with obstacles
+    const obstacleHitRadius = projectile.isMachineGun ? 0.5 : 1.0;
+    
+    for (const obstacle of this.obstacles) {
+      if (!obstacle.mesh) continue;
+      
+      const distance = projectilePos.distanceTo(obstacle.mesh.position);
+      
+      if (distance < obstacleHitRadius + obstacle.radius) {
+        // Create hit effect at collision point
+        if (this.particleSystem) {
+          this.particleSystem.createHitEffect(projectilePos.clone());
+        }
+        
+      
+        
+        // Remove the projectile
+        const index = this.projectiles.indexOf(projectile);
+        if (index !== -1) {
+          this.scene.remove(projectile.mesh);
+          this.projectiles.splice(index, 1);
+        }
+        
+        return true;
+      }
+    }
+    
+    // We don't need to check collisions with other players here
+    // The server will be authoritative about that and notify us
+    
+    return false;
   }
 } 

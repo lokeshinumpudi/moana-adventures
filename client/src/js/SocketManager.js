@@ -5,90 +5,142 @@ import { Character } from './components/Character.js';
 
 export class SocketManager {
   constructor(game) {
+    if (SocketManager.instance) {
+      return SocketManager.instance;
+    }
+    
     this.game = game;
     this.otherPlayers = new Map();
     this.lastUpdateTime = 0;
-    this.updateInterval = 100; // Update rate: 10 times per second (reduced from 20)
+    this.updateInterval = 50; // 20 times per second
     
     // Performance optimization settings
     this.interpolationFactor = 0.1; // Lower = smoother but more latency
-    this.positionThreshold = 0.05; // Minimum position change before sending update
-    this.rotationThreshold = 0.01; // Minimum rotation change before sending update
+    this.positionThreshold = 0.1; // Increased threshold to reduce network traffic
+    this.rotationThreshold = 0.05; // Increased threshold to reduce network traffic
     this.lastSentState = null; // Store last sent state to check for significant changes
     
     // Level of detail settings for distant players
     this.lodDistanceThreshold = 50; // Distance at which to reduce detail
     this.visibilityRange = 150; // Maximum range to show other players
     
+    // Projectile optimization
+    this.projectileUpdateInterval = 80; // Separate interval for when projectiles are active
+    this.projectilePositionThreshold = 2.0; // Higher threshold for projectile position changes
+    
+    // Initialize socket connection
+    this.socket = null;
     this.init();
+    
+    SocketManager.instance = this;
   }
   
   init() {
-    // Connect to socket server
-    const socketUrl = import.meta.env.PROD 
-      ? 'https://your-production-server.com' // Update with your production URL
-      : 'http://localhost:3000';
-      
-    this.socket = io(socketUrl, {
-      // Configure Socket.IO options for better performance
-      transports: ['websocket'],
-      upgrade: false, // Disable polling
+    if (this.socket) {
+      console.warn('Socket connection already exists');
+      return;
+    }
+    
+    this.socket = io('http://localhost:3000', {
+      reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 20000
+      reconnectionAttempts: 5
     });
     
-    // Set up event handlers
-    this.setupEventHandlers();
+    this.setupSocketListeners();
+  }
+  
+  setupSocketListeners() {
+    // Remove any existing listeners
+    this.socket.removeAllListeners();
     
-    // Send join event when connected
     this.socket.on('connect', () => {
-      console.log('Connected to server with ID:', this.socket.id);
+      console.log('Connected to server');
+      // Send initial state immediately on connect
+      if (this.game.ship) {
+        this.socket.emit('player:join', {
+          id: this.socket.id,
+          name: `Player ${this.socket.id.substring(0, 4)}`,
+          ship: this.game.getGameState().ship
+        });
+      }
+    });
+    
+    // Handle player list updates
+    this.socket.on('players:list', (players) => {
+      console.log('Received players list:', players);
       
-      this.socket.emit('player:join', {
-        name: 'Player ' + Math.floor(Math.random() * 1000),
-        color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+      // Remove players that aren't in the new list
+      for (const [id, player] of this.otherPlayers) {
+        if (!players.find(p => p.id === id)) {
+          this.removePlayer(id);
+        }
+      }
+      
+      // Add or update players from the list
+      players.forEach(playerData => {
+        if (playerData.id !== this.socket.id) {
+          if (!this.otherPlayers.has(playerData.id)) {
+            this.addOtherPlayer(playerData);
+          } else {
+            this.updateOtherPlayer(playerData);
+          }
+        }
       });
     });
     
-    // Set up update loop for sending player data
-    this.setupUpdateLoop();
-  }
-  
-  setupEventHandlers() {
-    // Receive existing players
-    this.socket.on('players:list', (players) => {
-      console.log('Received existing players:', players);
-      
-      // Handle players in batches to avoid frame drops
-      this.processBatchedPlayers(players);
+    // Handle new player joins
+    this.socket.on('player:joined', (playerData) => {
+      console.log('Player joined:', playerData);
+      if (playerData.id !== this.socket.id && !this.otherPlayers.has(playerData.id)) {
+        this.addOtherPlayer(playerData);
+      }
     });
     
-    // New player joined
-    this.socket.on('player:joined', (player) => {
-      console.log('New player joined:', player);
-      this.addOtherPlayer(player);
-    });
-    
-    // Player updated
-    this.socket.on('player:updated', (playerData) => {
-      this.updateOtherPlayer(playerData);
-    });
-    
-    // Player left
+    // Handle player disconnects
     this.socket.on('player:left', (playerId) => {
       console.log('Player left:', playerId);
-      this.removeOtherPlayer(playerId);
+      this.removePlayer(playerId);
     });
     
-    // Disconnection
+    // Handle player state updates
+    this.socket.on('player:updated', (data) => {
+      if (data.id === this.socket.id) return;
+      
+      const player = this.otherPlayers.get(data.id);
+      if (!player) return;
+      
+      this.updateOtherPlayer(data);
+    });
+    
+    // Handle projectile events
+    this.socket.on('projectile:fire', (data) => {
+      if (data.playerId === this.socket.id) return;
+      
+      const player = this.otherPlayers.get(data.playerId);
+      if (!player) return;
+      
+      this.handleProjectileFire(data);
+    });
+    
+    // Listen for projectile:added event from server
+    this.socket.on('projectile:added', (data) => {
+      console.log('Received projectile:added event:', data);
+      this.handleProjectileFire(data);
+    });
+    
+    this.socket.on('projectile:hit', (data) => {
+      this.handleProjectileHit(data);
+    });
+    
+    // Handle player hit events
+    this.socket.on('player:hit', (data) => {
+      this.handlePlayerHit(data);
+    });
+    
     this.socket.on('disconnect', () => {
       console.log('Disconnected from server');
-    });
-    
-    // Error handling
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
     });
   }
   
@@ -124,118 +176,147 @@ export class SocketManager {
   }
   
   update(delta) {
-    // Interpolate other players' positions
+    if (!this.socket?.connected || !this.game.ship) return;
+    
+    const now = Date.now();
+    const hasActiveProjectiles = this.game.projectiles.length > 0;
+    const updateInterval = hasActiveProjectiles ? this.projectileUpdateInterval : this.updateInterval;
+    
+    if (now - this.lastUpdateTime < updateInterval) return;
+    
+    // Send current state to server
+    const currentState = this.game.getGameState();
+    this.socket.emit('player:state', {
+      id: this.socket.id,
+      ...currentState
+    });
+    
+    // Update other players' interpolation
     this.interpolateOtherPlayers(delta);
     
-    // Send player state to server at fixed interval
-    const now = Date.now();
-    if (now - this.lastUpdateTime > this.updateInterval) {
-      this.sendGameState();
-      this.lastUpdateTime = now;
-    }
+    this.lastUpdateTime = now;
   }
   
   hasSignificantChanges(currentState) {
-    // Skip throttling if we haven't sent anything yet
     if (!this.lastSentState) return true;
     
-    // Check if ship position has changed significantly
-    const positionChanged = 
-      Math.abs(currentState.ship.position.x - this.lastSentState.ship.position.x) > this.positionThreshold ||
-      Math.abs(currentState.ship.position.y - this.lastSentState.ship.position.y) > this.positionThreshold ||
-      Math.abs(currentState.ship.position.z - this.lastSentState.ship.position.z) > this.positionThreshold;
+    const hasProjectiles = this.game.projectiles.length > 0;
+    const posThreshold = hasProjectiles ? this.projectilePositionThreshold : this.positionThreshold;
     
-    // Check if rotation has changed significantly
-    const rotationChanged = 
-      Math.abs(currentState.ship.rotation.y - this.lastSentState.ship.rotation.y) > this.rotationThreshold;
+    const positionChanged = Math.abs(currentState.ship.position.x - this.lastSentState.ship.position.x) > posThreshold ||
+                           Math.abs(currentState.ship.position.y - this.lastSentState.ship.position.y) > posThreshold ||
+                           Math.abs(currentState.ship.position.z - this.lastSentState.ship.position.z) > posThreshold;
+                           
+    const rotationChanged = Math.abs(currentState.ship.rotation.y - this.lastSentState.ship.rotation.y) > this.rotationThreshold;
     
-    // Check if health has changed
-    const healthChanged = currentState.ship.health !== this.lastSentState.ship.health;
-    
-    // Always send if projectiles have changed
-    const projectilesChanged = 
-      !this.lastSentState.projectiles || 
-      currentState.projectiles.length !== this.lastSentState.projectiles.length;
-    
-    return positionChanged || rotationChanged || healthChanged || projectilesChanged;
+    return positionChanged || rotationChanged;
   }
   
   sendGameState() {
-    // Only send if connected and game is running
-    if (this.socket && this.socket.connected && this.game.isRunning) {
-      const gameState = this.game.getGameState();
+    if (!this.socket.connected) return;
+    
+    const gameState = this.game.getGameState();
+    
+    // Check if there are significant changes before sending
+    if (this.hasSignificantChanges(gameState)) {
+      // Remove projectiles from state we send (we'll handle them separately)
+      const stateToSend = { ...gameState };
+      delete stateToSend.projectiles;
       
-      // Check if there are significant changes before sending
-      if (this.hasSignificantChanges(gameState)) {
-        this.socket.emit('player:state', gameState);
-        this.lastSentState = gameState;
-      }
+      this.socket.emit('player:state', stateToSend);
+      this.lastSentState = { ...gameState };
     }
   }
   
+  // Register a projectile fired by the local player with the server
+  fireProjectile(projectile) {
+    if (!this.socket.connected) return;
+    
+    const projectileData = {
+      playerId: this.socket.id,
+      id: Date.now() + '_' + Math.floor(Math.random() * 1000),
+      position: projectile.mesh.position.clone(),
+      velocity: projectile.velocity.clone(),
+      type: projectile.isMachineGun ? 'machineGun' : 'cannon'
+    };
+
+    console.log('Sending projectile fire:', projectileData);
+    this.socket.emit('projectile:fire', projectileData);
+  }
+  
+  // Create a lightweight projectile representation for other players
+  createSimplifiedProjectile(position, direction, size, isMachineGun) {
+    const geometry = new THREE.SphereGeometry(size, 8, 8);
+    
+    // Use a simpler material for performance
+    const material = new THREE.MeshBasicMaterial({
+      color: isMachineGun ? 0xFFFF00 : 0xFF0000
+    });
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position);
+    
+    // Create a simplified projectile object
+    const projectile = {
+      mesh: mesh,
+      velocity: direction.clone().multiplyScalar(isMachineGun ? 3 : 2),
+      damage: isMachineGun ? 1 : 10,
+      isMachineGun: isMachineGun,
+      lifetime: 0,
+      maxLifetime: 10 // in seconds
+    };
+    
+    return projectile;
+  }
+  
   addOtherPlayer(playerData) {
-    // Don't add if it's our own player or already exists
     if (playerData.id === this.socket.id || this.otherPlayers.has(playerData.id)) {
       return;
     }
     
-    // Create a new ship for the other player
-    const otherShip = new Ship();
-    
-    // Use a simplified init since we don't need full functionality for other players
-    otherShip.init().then(() => {
-      // Create character for the ship
-      const character = new Character();
-      character.init().then(() => {
-        // Disable hairPhysics on remote characters to save performance
-        character.hairPhysicsEnabled = false;
-        
-        // Set initial position if available
-        if (playerData.ship && playerData.ship.position) {
-          otherShip.mesh.position.set(
+    const ship = new Ship();
+    ship.init().then(() => {
+      // Set initial position and rotation if available
+      if (playerData.ship) {
+        if (playerData.ship.position) {
+          ship.mesh.position.set(
             playerData.ship.position.x,
             playerData.ship.position.y,
             playerData.ship.position.z
           );
-          
-          if (playerData.ship.rotation) {
-            otherShip.mesh.rotation.set(
-              playerData.ship.rotation.x,
-              playerData.ship.rotation.y,
-              playerData.ship.rotation.z
-            );
-          }
-          
-          character.mesh.position.copy(otherShip.getCharacterPosition());
         }
-        
-        // Add to scene
-        this.game.scene.add(otherShip.mesh);
-        this.game.scene.add(character.mesh);
-        
-        // Store player data
-        this.otherPlayers.set(playerData.id, {
-          id: playerData.id,
-          name: playerData.name,
-          ship: otherShip,
-          character: character,
-          projectiles: [],
-          // Add interpolation data
-          interpolation: {
-            position: new THREE.Vector3().copy(otherShip.mesh.position),
-            rotation: new THREE.Euler().copy(otherShip.mesh.rotation),
-            targetPosition: new THREE.Vector3().copy(otherShip.mesh.position),
-            targetRotation: new THREE.Euler().copy(otherShip.mesh.rotation),
-            lastUpdateTime: Date.now()
-          }
-        });
+        if (playerData.ship.rotation) {
+          ship.mesh.rotation.set(
+            playerData.ship.rotation.x,
+            playerData.ship.rotation.y,
+            playerData.ship.rotation.z
+          );
+        }
+      }
+      
+      // Add to scene
+      this.game.scene.add(ship.mesh);
+      
+      // Store player data
+      this.otherPlayers.set(playerData.id, {
+        id: playerData.id,
+        name: playerData.name,
+        ship: ship,
+        projectiles: [],
+        interpolation: {
+          position: ship.mesh.position.clone(),
+          rotation: ship.mesh.rotation.clone(),
+          targetPosition: ship.mesh.position.clone(),
+          targetRotation: ship.mesh.rotation.clone(),
+          lastUpdateTime: Date.now()
+        }
       });
     });
   }
   
   updateOtherPlayer(playerData) {
     const player = this.otherPlayers.get(playerData.id);
-    if (!player) return;
+    if (!player || !player.ship) return;
     
     // Update interpolation targets
     if (playerData.ship) {
@@ -258,43 +339,111 @@ export class SocketManager {
       player.interpolation.lastUpdateTime = Date.now();
     }
     
-    // Update projectiles - create new ones or update existing
+    // Handle projectile events - client-side prediction model
     if (playerData.projectiles && playerData.projectiles.length > 0) {
       playerData.projectiles.forEach(projectileData => {
-        let projectile = player.projectiles.find(p => p.id === projectileData.id);
-        
-        // Create new projectile if doesn't exist
-        if (!projectile) {
-          projectile = player.ship.createProjectile();
-          this.game.scene.add(projectile.mesh);
-          player.projectiles.push(projectile);
-        }
-        
-        // Update projectile position and velocity
-        if (projectileData.position) {
-          projectile.mesh.position.set(
+        // Only process new projectiles we haven't seen before
+        // This is the key change - we only add new projectiles, then predict locally
+        if (!player.projectiles.some(p => p.id === projectileData.id)) {
+          // Get the initial position and direction
+          const position = new THREE.Vector3(
             projectileData.position.x,
             projectileData.position.y,
             projectileData.position.z
           );
-        }
-        
-        if (projectileData.velocity) {
-          projectile.velocity.set(
+          
+          const velocity = new THREE.Vector3(
             projectileData.velocity.x,
             projectileData.velocity.y,
             projectileData.velocity.z
           );
+          
+          // Determine direction from velocity
+          const direction = velocity.clone().normalize();
+          
+          // Determine if it's a machine gun or cannonball
+          const isMachineGun = projectileData.type === 'machineGun';
+          const size = isMachineGun ? 0.1 : 0.5;
+          
+          // Create a simplified projectile for other players
+          const projectile = this.createSimplifiedProjectile(position, direction, size, isMachineGun);
+          
+          // Copy ID from network data
+          projectile.id = projectileData.id;
+          
+          // Set velocity directly from data
+          projectile.velocity = velocity.clone();
+          
+          // Set creation time
+          projectile.creationTime = Date.now();
+          
+          // Set the initial position explicitly
+          projectile.initialPosition = position.clone();
+          
+          // Add to scene and player's projectiles array
+          this.game.scene.add(projectile.mesh);
+          player.projectiles.push(projectile);
+          
+          // Add appropriate visual effect
+          if (this.game.particleSystem) {
+            if (isMachineGun) {
+              this.game.particleSystem.createMuzzleFlash(position);
+            } else {
+              this.game.particleSystem.createCannonFire(position);
+            }
+          }
+          
+          // Create sound for projectile firing - not implemented in this version
+          // if (this.game.soundManager) {
+          //   this.game.soundManager.playSound(isMachineGun ? 'machineGun' : 'cannon', position);
+          // }
         }
+        
+        // We no longer update existing projectiles based on network data
+        // Instead, we'll let the client-side physics handle all trajectory updates
       });
       
-      // Remove projectiles that are no longer in the update
-      const projectileIds = new Set(playerData.projectiles.map(p => p.id));
-      for (let i = player.projectiles.length - 1; i >= 0; i--) {
-        if (!projectileIds.has(player.projectiles[i].id)) {
-          this.game.scene.remove(player.projectiles[i].mesh);
-          player.projectiles.splice(i, 1);
+      // We still track the projectile IDs the server knows about to handle server reconciliation
+      this.knownProjectileIds = new Set(playerData.projectiles.map(p => p.id));
+    }
+    
+    // Handle projectile removal events (server-side hits or timeout)
+    if (playerData.removeProjectileIds && playerData.removeProjectileIds.length > 0) {
+      playerData.removeProjectileIds.forEach(projectileId => {
+        const projectileIndex = player.projectiles.findIndex(p => p.id === projectileId);
+        if (projectileIndex !== -1) {
+          // Remove from scene
+          this.game.scene.remove(player.projectiles[projectileIndex].mesh);
+          
+          // Remove from array
+          player.projectiles.splice(projectileIndex, 1);
+          
+          // If there's hit position data, create a hit effect
+          if (playerData.hitPositions && playerData.hitPositions[projectileId]) {
+            const hitPos = playerData.hitPositions[projectileId];
+            const hitPosition = new THREE.Vector3(hitPos.x, hitPos.y, hitPos.z);
+            
+            // Create hit effect
+            if (this.game.particleSystem) {
+              this.game.particleSystem.createHitEffect(hitPosition);
+            }
+          }
         }
+      });
+    }
+    
+    // Safety cleanup - remove any projectiles that are too old (10 seconds)
+    const now = Date.now();
+    const maxAge = 10000; // 10 seconds
+    
+    for (let i = player.projectiles.length - 1; i >= 0; i--) {
+      const projectile = player.projectiles[i];
+      if (now - projectile.creationTime > maxAge) {
+        // Remove from scene
+        this.game.scene.remove(projectile.mesh);
+        
+        // Remove from array
+        player.projectiles.splice(i, 1);
       }
     }
   }
@@ -311,11 +460,15 @@ export class SocketManager {
       // Skip updates for very distant players
       if (distance > this.visibilityRange) {
         player.ship.mesh.visible = false;
-        player.character.mesh.visible = false;
+        if (player.character?.mesh) {
+          player.character.mesh.visible = false;
+        }
         return;
       } else {
         player.ship.mesh.visible = true;
-        player.character.mesh.visible = true;
+        if (player.character?.mesh) {
+          player.character.mesh.visible = true;
+        }
       }
       
       // Adjust interpolation speed based on distance
@@ -351,7 +504,7 @@ export class SocketManager {
       });
       
       // Update character position based on ship
-      if (player.character) {
+      if (player.character?.mesh) {
         player.character.mesh.position.copy(player.ship.getCharacterPosition());
         player.character.mesh.rotation.copy(player.ship.mesh.rotation);
       }
@@ -363,7 +516,7 @@ export class SocketManager {
     });
   }
   
-  removeOtherPlayer(playerId) {
+  removePlayer(playerId) {
     const player = this.otherPlayers.get(playerId);
     if (!player) return;
     
@@ -382,5 +535,174 @@ export class SocketManager {
     
     // Remove from map
     this.otherPlayers.delete(playerId);
+  }
+  
+  handleProjectileFire(data) {
+    console.log('Received projectile event:', data);
+    
+    // Skip if this is our own projectile
+    if (data.playerId === this.socket.id) {
+      console.log('Skipping own projectile');
+      return;
+    }
+    
+    // Get the player who fired
+    const player = this.otherPlayers.get(data.playerId);
+    if (!player) {
+      console.log('Player not found for projectile:', data.playerId);
+      return;
+    }
+    
+    // Initialize player's projectiles array if it doesn't exist
+    if (!player.projectiles) {
+      player.projectiles = [];
+    }
+
+    // Create projectile
+    const position = new THREE.Vector3(
+      data.position.x, 
+      data.position.y, 
+      data.position.z
+    );
+    
+    const velocity = new THREE.Vector3(
+      data.velocity.x, 
+      data.velocity.y, 
+      data.velocity.z
+    );
+    
+    // Determine if this is a machine gun projectile
+    const isMachineGun = data.type === 'machineGun';
+    
+    const projectile = this.game.createProjectile(
+      position, 
+      velocity.clone().normalize(), 
+      isMachineGun
+    );
+    
+    projectile.velocity.copy(velocity);
+    projectile.id = data.id;
+    projectile.creationTime = Date.now();
+
+    // Add to scene and player's projectiles
+    this.game.scene.add(projectile.mesh);
+    player.projectiles.push(projectile);
+
+    console.log('Created projectile for player:', {
+      playerId: data.playerId,
+      id: projectile.id,
+      position: projectile.mesh.position.toArray(),
+      velocity: projectile.velocity.toArray(),
+      type: data.type
+    });
+  }
+  
+  handleProjectileHit(data) {
+    console.log('Received projectile hit:', data);
+    
+    // Find the projectile in projectiles array
+    if (this.game.projectiles) {
+      const projectileIndex = this.game.projectiles.findIndex(p => p.id === data.id);
+      
+      if (projectileIndex >= 0) {
+        const projectile = this.game.projectiles[projectileIndex];
+        
+        // Create explosion effect at hit position
+        if (data.position) {
+          const hitPosition = new THREE.Vector3(
+            data.position.x,
+            data.position.y,
+            data.position.z
+          );
+          
+          // Create explosion effect
+          this.game.particleSystem.createExplosion(hitPosition, 1.0);
+        } else if (projectile && projectile.mesh) {
+          // If hit position not provided, use projectile position
+          this.game.particleSystem.createExplosion(projectile.mesh.position, 1.0);
+        }
+        
+        // Remove projectile from scene and array
+        if (projectile && projectile.mesh) {
+          this.game.scene.remove(projectile.mesh);
+        }
+        
+        // Remove from array
+        this.game.projectiles.splice(projectileIndex, 1);
+      }
+    }
+    
+    // Also check in other players' projectiles
+    this.otherPlayers.forEach(player => {
+      if (player.projectiles) {
+        const projectileIndex = player.projectiles.findIndex(p => p.id === data.id);
+        
+        if (projectileIndex >= 0) {
+          const projectile = player.projectiles[projectileIndex];
+          
+          // Create explosion effect
+          if (projectile && projectile.mesh) {
+            this.game.particleSystem.createExplosion(projectile.mesh.position, 1.0);
+            this.game.scene.remove(projectile.mesh);
+          }
+          
+          // Remove from array
+          player.projectiles.splice(projectileIndex, 1);
+        }
+      }
+    });
+  }
+  
+  handlePlayerHit(data) {
+    console.log('Player hit:', data);
+    
+    // Flash the ship to indicate damage
+    if (this.game.ship) {
+      // Make the ship flash red briefly
+      const originalMaterials = [];
+      const shipParts = this.game.ship.getMeshes();
+      
+      // Store original materials and set to red
+      shipParts.forEach(part => {
+        if (part.material) {
+          originalMaterials.push({
+            mesh: part,
+            material: part.material.clone()
+          });
+          
+          // Create a red material
+          const flashMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.5
+          });
+          
+          part.material = flashMaterial;
+        }
+      });
+      
+      // Create hit effect particles at the hit position
+      if (data.position) {
+        const hitPosition = new THREE.Vector3(
+          data.position.x,
+          data.position.y,
+          data.position.z
+        );
+        
+        this.game.particleSystem.createExplosion(hitPosition, 0.5);
+      }
+      
+      // Restore original materials after a short delay
+      setTimeout(() => {
+        originalMaterials.forEach(item => {
+          item.mesh.material = item.material;
+        });
+      }, 100);
+      
+      // Show damage in the HUD
+      if (this.game.hud) {
+        this.game.hud.updateHealth(data.damage);
+      }
+    }
   }
 } 

@@ -3,7 +3,7 @@ import { Projectile } from './Projectile.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class Ship {
-  constructor() {
+  constructor(inputManager = null) {
     // Ship properties
     this.speed = 0;
     this.maxSpeed = 15;
@@ -12,6 +12,7 @@ export class Ship {
     this.collisionRadius = 3.5;
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3(0, 0, 1);
+    this.inputManager = inputManager;
     
     // Create a group for the ship and its parts
     this.mesh = new THREE.Group();
@@ -388,12 +389,16 @@ export class Ship {
     return cannonGroup;
   }
   
-  update(delta, inputManager) {
+  update(delta, inputManager = null) {
+    // Use provided inputManager or fallback to instance inputManager
+    const input = inputManager || this.inputManager;
+    if (!input) return;
+    
     // Handle rotation
-    if (inputManager.isTurningLeft()) {
+    if (input.isTurningLeft()) {
       this.mesh.rotation.y += this.rotationSpeed * delta;
     }
-    if (inputManager.isTurningRight()) {
+    if (input.isTurningRight()) {
       this.mesh.rotation.y -= this.rotationSpeed * delta;
     }
     
@@ -401,9 +406,9 @@ export class Ship {
     this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
     
     // Handle acceleration and deceleration
-    if (inputManager.isMovingForward()) {
+    if (input.isMovingForward()) {
       this.speed = Math.min(this.speed + this.acceleration * delta, this.maxSpeed);
-    } else if (inputManager.isMovingBackward()) {
+    } else if (input.isMovingBackward()) {
       this.speed = Math.max(this.speed - this.acceleration * delta, -this.maxSpeed / 2);
     } else {
       // Decelerate when no input
@@ -449,7 +454,7 @@ export class Ship {
     this.mesh.position.y = bobHeight + 0.5;
     
     // Gentle roll based on turning
-    const rollAngle = inputManager.isTurningLeft() ? 0.15 : (inputManager.isTurningRight() ? -0.15 : 0);
+    const rollAngle = input.isTurningLeft() ? 0.15 : (input.isTurningRight() ? -0.15 : 0);
     this.mesh.rotation.z = rollAngle * (this.speed / this.maxSpeed);
     
     // Pitch based on speed

@@ -148,7 +148,7 @@ export class InputManager {
   fireLeftCannon() {
     const now = Date.now();
     if (now - this.lastLeftCannonFire > this.cannonCooldown) {
-      this.game.fireCannonball('left');
+      this.game.fireProjectile('left');
       this.lastLeftCannonFire = now;
     }
   }
@@ -156,7 +156,7 @@ export class InputManager {
   fireRightCannon() {
     const now = Date.now();
     if (now - this.lastRightCannonFire > this.cannonCooldown) {
-      this.game.fireCannonball('right');
+      this.game.fireProjectile('right');
       this.lastRightCannonFire = now;
     }
   }

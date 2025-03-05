@@ -133,18 +133,18 @@ export class Ocean {
     // Ocean properties
     this.size = 1000;
     this.segments = 128;
-    this.waveHeight = 0.8; // Increased wave height
-    this.waveSpeed = 0.4;
-    this.waveFrequency = 0.02;
+    this.waveHeight = 1.2; // Increased wave height for more dramatic waves
+    this.waveSpeed = 0.5;  // Slightly faster waves
+    this.waveFrequency = 0.025; // Adjusted frequency
     
     // Animation properties
     this.time = 0;
 
     this.uniforms = {
       time: { value: 0 },
-      oceanColor: { value: new THREE.Color(0x4a9ff5) },  // Bright blue
+      oceanColor: { value: new THREE.Color(0x0077be) },  // More saturated blue
       foamColor: { value: new THREE.Color(0xffffff) },   // White foam
-      deepColor: { value: new THREE.Color(0x1e4877) }    // Deep blue
+      deepColor: { value: new THREE.Color(0x00487d) }    // Richer deep blue
     };
   }
   
