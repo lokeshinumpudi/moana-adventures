@@ -44,6 +44,7 @@ export class Game {
     // Collision optimization
     this.collisionCheckInterval = 100; // Check collisions every 100ms
     this.lastCollisionCheck = 0;
+    this.lastPickupCheck = 0;
     
     // Initialize HUD
     this.hud = new HUD(this);
@@ -214,20 +215,110 @@ export class Game {
   }
   
   createObstacles() {
-    // Create several obstacles at different positions
+    // Create many more obstacles at different positions
     const obstaclePositions = [
       { x: 40, z: 40, type: 'rock' },
       { x: -60, z: 20, type: 'coral' },
       { x: 70, z: -40, type: 'island' },
-      { x: -80, z: -70, type: 'wreck' }
+      { x: -80, z: -70, type: 'wreck' },
+      { x: 30, z: -90, type: 'rock' },
+      { x: -40, z: 60, type: 'coral' },
+      { x: 90, z: 80, type: 'wreck' },
+      { x: -120, z: -20, type: 'island' },
+      { x: 150, z: 30, type: 'rock' },
+      { x: -30, z: -120, type: 'coral' },
+      { x: 110, z: -70, type: 'rock' },
+      { x: -90, z: 110, type: 'wreck' },
+      // Add random obstacles in a wider area
+      ...Array(15).fill().map(() => ({
+        x: (Math.random() - 0.5) * 500,
+        z: (Math.random() - 0.5) * 500,
+        type: ['rock', 'coral', 'wreck', 'island'][Math.floor(Math.random() * 4)]
+      }))
     ];
     
     obstaclePositions.forEach(pos => {
       const obstacle = new Obstacle(pos.type);
       obstacle.init().then(() => {
         obstacle.mesh.position.set(pos.x, 0, pos.z);
+        // Add random rotation
+        obstacle.mesh.rotation.y = Math.random() * Math.PI * 2;
+        // Randomize scale slightly
+        const scale = 0.8 + Math.random() * 0.4;
+        obstacle.mesh.scale.set(scale, scale, scale);
         this.scene.add(obstacle.mesh);
         this.obstacles.push(obstacle);
+      });
+    });
+    
+    // Create pickups
+    this.createPickups();
+  }
+  
+  createPickups() {
+    // Initialize pickups array
+    this.pickups = [];
+    
+    // Create different types of pickups
+    const pickupTypes = ['health', 'ammo', 'speed', 'shield'];
+    const pickupPositions = Array(20).fill().map(() => ({
+      x: (Math.random() - 0.5) * 400,
+      z: (Math.random() - 0.5) * 400,
+      type: pickupTypes[Math.floor(Math.random() * pickupTypes.length)]
+    }));
+    
+    // Import Pickup class if needed
+    import('./components/Pickup.js').then(module => {
+      const Pickup = module.Pickup;
+      
+      pickupPositions.forEach(pos => {
+        const pickup = new Pickup(pos.type);
+        pickup.init().then(() => {
+          pickup.mesh.position.set(pos.x, 1, pos.z);
+          this.scene.add(pickup.mesh);
+          this.pickups.push(pickup);
+        });
+      });
+    }).catch(error => {
+      console.error("Failed to load Pickup class:", error);
+      // Fallback to using basic objects if Pickup class doesn't exist
+      this.createBasicPickups(pickupPositions);
+    });
+  }
+  
+  createBasicPickups(positions) {
+    // Create simple pickups if the Pickup class isn't available
+    positions.forEach(pos => {
+      const geometry = new THREE.SphereGeometry(1, 8, 8);
+      let material;
+      
+      switch(pos.type) {
+        case 'health':
+          material = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 });
+          break;
+        case 'ammo':
+          material = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 });
+          break;
+        case 'speed':
+          material = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 });
+          break;
+        case 'shield':
+          material = new THREE.MeshStandardMaterial({ color: 0x0000ff, emissive: 0x0000ff, emissiveIntensity: 0.5 });
+          break;
+        default:
+          material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+      }
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(pos.x, 1, pos.z);
+      mesh.userData.pickupType = pos.type;
+      mesh.userData.isPickup = true;
+      
+      this.scene.add(mesh);
+      this.pickups.push({
+        mesh: mesh,
+        type: pos.type,
+        collisionRadius: 2
       });
     });
   }
@@ -306,8 +397,6 @@ export class Game {
     this.projectiles.push(projectile);
     this.scene.add(projectile.mesh);
 
-    // Add smoke particle effect
-    this.particleSystem.createCannonSmoke(position);
   }
   
   removeOldestProjectile() {
@@ -439,7 +528,7 @@ export class Game {
       },
       projectiles: this.projectiles.map(projectile => ({
         id: projectile.id,
-        type: projectile.type,
+        type: projectile.isMachineGun ? 'machineGun' : 'cannonball',
         position: {
           x: projectile.mesh.position.x,
           y: projectile.mesh.position.y,
@@ -449,7 +538,8 @@ export class Game {
           x: projectile.velocity.x,
           y: projectile.velocity.y,
           z: projectile.velocity.z
-        }
+        },
+        createdAt: projectile.creationTime
       })),
       score: this.score
     };
@@ -566,6 +656,13 @@ export class Game {
       buoy.update(delta);
     });
     
+    // Update pickups
+    if (this.pickups) {
+      this.pickups.forEach(pickup => {
+        if (pickup.update) pickup.update(delta);
+      });
+    }
+    
     // Update particle system
     this.particleSystem.update(delta);
     
@@ -574,6 +671,9 @@ export class Game {
     
     // Check collisions
     this.checkCollisions();
+    
+    // Check pickup collisions
+    this.checkPickupCollisions();
     
     // Update HUD
     this.hud.update();
@@ -597,5 +697,58 @@ export class Game {
   render() {
     // Render the scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  checkPickupCollisions() {
+    if (!this.ship || !this.pickups || this.pickups.length === 0) return;
+    
+    const now = Date.now();
+    
+    // Only check every 100ms to optimize performance
+    if (now - this.lastPickupCheck < 100) return;
+    this.lastPickupCheck = now;
+    
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const pickup = this.pickups[i];
+      
+      // Calculate distance between ship and pickup
+      const distance = this.ship.mesh.position.distanceTo(pickup.mesh.position);
+      
+      // Check if ship is close enough to pickup
+      if (distance < (this.ship.collisionRadius + pickup.collisionRadius)) {
+        // Apply the pickup effect
+        if (pickup.applyEffect) {
+          pickup.applyEffect(this.ship);
+        } else {
+          // Fallback for basic pickups
+          switch(pickup.type) {
+            case 'health':
+              this.ship.health = Math.min(100, this.ship.health + 25);
+              break;
+            case 'ammo':
+              // Add ammo logic if needed
+              break;
+            case 'speed':
+              this.ship.speedBoost = 5;
+              this.ship.speedBoostTime = now + 10000;
+              break;
+            case 'shield':
+              this.ship.shield = 100;
+              this.ship.shieldTime = now + 30000;
+              break;
+          }
+        }
+        
+        // Create pickup effect
+        this.particleSystem.createPickupEffect(pickup.mesh.position, pickup.type);
+        
+        // Remove pickup from scene and array
+        this.scene.remove(pickup.mesh);
+        this.pickups.splice(i, 1);
+        
+        // Play pickup sound
+        // (Add sound logic here if you have a sound system)
+      }
+    }
   }
 } 

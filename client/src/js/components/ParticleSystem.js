@@ -338,6 +338,83 @@ export class ParticleSystem {
     }
   }
   
+  createPickupEffect(position, type) {
+    // Create a burst of particles for pickup effect
+    const count = Math.floor(Math.random() * 15) + 10;
+    
+    // Determine color based on pickup type
+    let color;
+    switch (type) {
+      case 'health':
+        color = 0xff0000; // Red
+        break;
+      case 'ammo':
+        color = 0xffff00; // Yellow
+        break;
+      case 'speed':
+        color = 0x00ff00; // Green
+        break;
+      case 'shield':
+        color = 0x0088ff; // Blue
+        break;
+      default:
+        color = 0xffffff; // White
+    }
+    
+    // Create custom material for this effect
+    const material = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending
+    });
+    
+    // Create particles in a spherical burst
+    for (let i = 0; i < count; i++) {
+      // Calculate random direction
+      const direction = new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      ).normalize();
+      
+      // Calculate random speed
+      const speed = Math.random() * 0.3 + 0.2;
+      
+      // Create particle with velocity in random direction
+      this.createParticle(position.clone(), {
+        size: 'medium',
+        material: material.clone(),
+        velocity: direction.multiplyScalar(speed),
+        lifespan: 800 + Math.random() * 400,
+        fadeRate: 0.05,
+        scaleRate: 0.97,
+        gravity: false,
+        drag: 0.98
+      });
+    }
+    
+    // Create a flash effect at the center
+    const flashMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending
+    });
+    
+    // Create a single large expanding particle for the flash
+    this.createParticle(position.clone(), {
+      size: 'large',
+      material: flashMaterial,
+      velocity: new THREE.Vector3(0, 0, 0),
+      lifespan: 300,
+      fadeRate: 0.1,
+      scaleRate: 1.1, // Expand rapidly
+      gravity: false,
+      drag: 1.0 // No drag
+    });
+  }
+  
   update(delta) {
     // Calculate elapsed time since last frame
     const now = Date.now();

@@ -94,7 +94,7 @@ export class HUD {
         const relativePos = player.ship.mesh.position.clone()
           .sub(this.game.ship.mesh.position);
 
-        // Convert world position to radar coordinates (scale down by 2)
+        // Convert world position to radar coordinates
         const radarX = (relativePos.x / 200 * 100) + 50;
         const radarZ = (relativePos.z / 200 * 100) + 50;
 
@@ -105,6 +105,55 @@ export class HUD {
           enemyBlip.style.left = `${radarX}%`;
           enemyBlip.style.top = `${radarZ}%`;
           this.blipsContainer.appendChild(enemyBlip);
+        }
+      });
+    }
+    
+    // Add obstacle blips
+    if (this.game.obstacles && this.game.obstacles.length > 0) {
+      this.game.obstacles.forEach(obstacle => {
+        if (!obstacle.mesh || !this.game.ship) return;
+        
+        // Calculate relative position
+        const relativePos = obstacle.mesh.position.clone()
+          .sub(this.game.ship.mesh.position);
+          
+        // Convert world position to radar coordinates
+        const radarX = (relativePos.x / 200 * 100) + 50;
+        const radarZ = (relativePos.z / 200 * 100) + 50;
+        
+        // Only show if within radar range
+        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
+          const obstacleBlip = document.createElement('div');
+          obstacleBlip.className = 'obstacle-blip';
+          obstacleBlip.style.left = `${radarX}%`;
+          obstacleBlip.style.top = `${radarZ}%`;
+          this.blipsContainer.appendChild(obstacleBlip);
+        }
+      });
+    }
+    
+    // Also add buoys to the radar
+    if (this.game.buoys && this.game.buoys.length > 0) {
+      this.game.buoys.forEach(buoy => {
+        if (!buoy.mesh || !this.game.ship) return;
+        
+        // Calculate relative position
+        const relativePos = buoy.mesh.position.clone()
+          .sub(this.game.ship.mesh.position);
+          
+        // Convert world position to radar coordinates
+        const radarX = (relativePos.x / 200 * 100) + 50;
+        const radarZ = (relativePos.z / 200 * 100) + 50;
+        
+        // Only show if within radar range
+        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
+          const buoyBlip = document.createElement('div');
+          buoyBlip.className = 'obstacle-blip';
+          buoyBlip.style.backgroundColor = 'var(--secondary-color)';
+          buoyBlip.style.left = `${radarX}%`;
+          buoyBlip.style.top = `${radarZ}%`;
+          this.blipsContainer.appendChild(buoyBlip);
         }
       });
     }
