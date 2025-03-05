@@ -24,11 +24,15 @@ export class Game {
     this.obstacles = [];
     this.buoys = [];
     
+    // Player stats
+    this.score = 0;
+    this.kills = 0;
+    
     // Set up cooldowns for firing
     this.lastCannonFireTime = 0;
-    this.cannonCooldown = 300; // Reduced from 1000ms to 300ms
+    this.cannonCooldown = 10; // Reduced from 1000ms to 300ms
     this.lastMachineGunFireTime = 0;
-    this.machineGunCooldown = 50; // Reduced from 100ms to 50ms
+    this.machineGunCooldown = 10; // Reduced from 100ms to 50ms
     
     // Set up performance optimization properties
     this.lastProjectileUpdateTime = 0;
@@ -320,8 +324,11 @@ export class Game {
   }
   
   createProjectile(position, direction, isMachineGun) {
-    const size = isMachineGun ? 0.1 : 0.3;
-    const geometry = new THREE.SphereGeometry(size, 8, 8);
+    const projectileSettings = isMachineGun ? 
+      this.ship.weaponSettings.machineGun : 
+      this.ship.weaponSettings.cannon;
+
+    const geometry = new THREE.SphereGeometry(projectileSettings.size, 8, 8);
     const material = new THREE.MeshBasicMaterial({ 
       color: isMachineGun ? 0xFFC107 : 0x333333
     });
@@ -331,9 +338,9 @@ export class Game {
     
     return {
       mesh,
-      velocity: direction.clone().multiplyScalar(isMachineGun ? 50 : 30),
+      velocity: direction.clone().multiplyScalar(projectileSettings.speed),
       creationTime: Date.now(),
-      damage: isMachineGun ? 1 : 10,
+      damage: projectileSettings.damage,
       isMachineGun,
       update(delta) {
         this.velocity.y -= 9.8 * delta;
@@ -349,27 +356,33 @@ export class Game {
     let isMachineGun = side.includes('machine');
     let cannon;
     let cooldown;
+    let direction = new THREE.Vector3();
     
     switch(side) {
       case 'left':
         cannon = this.ship.leftCannon;
         cooldown = now - this.lastCannonFireTime < this.cannonCooldown;
+        direction.set(-1, 0, 0); // Left direction
         break;
       case 'right':
         cannon = this.ship.rightCannon;
         cooldown = now - this.lastCannonFireTime < this.cannonCooldown;
+        direction.set(1, 0, 0); // Right direction
         break;
       case 'left-machine':
         cannon = this.ship.machineGuns.left;
         cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
+        direction.set(-1, 0, 0); // Left direction
         break;
       case 'right-machine':
         cannon = this.ship.machineGuns.right;
         cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
+        direction.set(1, 0, 0); // Right direction
         break;
       case 'front':
-        cannon = this.ship.machineGuns.front;
-        cooldown = now - this.lastMachineGunFireTime < this.machineGunCooldown;
+        cannon = this.ship.frontCannon;
+        cooldown = now - this.lastCannonFireTime < this.cannonCooldown;
+        direction.set(0, 0, 1); // Forward direction
         break;
       default:
         return;
@@ -377,11 +390,14 @@ export class Game {
 
     if (cooldown || !cannon) return;
 
+    // Get cannon world position
     const startPosition = new THREE.Vector3();
     cannon.getWorldPosition(startPosition);
 
-    const direction = new THREE.Vector3(0, 0, 1);
-    direction.applyQuaternion(cannon.getWorldQuaternion(new THREE.Quaternion()));
+    // Apply ship's rotation to the direction vector
+    direction.applyQuaternion(this.ship.mesh.quaternion);
+    
+    console.log(`Firing ${side} cannon, direction:`, direction);
 
     const projectile = this.createProjectile(startPosition, direction, isMachineGun);
     this.scene.add(projectile.mesh);
@@ -664,6 +680,11 @@ export class Game {
     // Update particle effects
     if (this.particleSystem) {
       this.particleSystem.update(delta);
+    }
+    
+    // Update ocean waves
+    if (this.ocean) {
+      this.ocean.update(delta);
     }
     
     // Update other players through socket manager

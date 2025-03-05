@@ -8,7 +8,7 @@ const oceanVertexShader = `
   
   // Wave parameters
   const float PI = 3.14159;
-  const int WAVE_COUNT = 4;
+  const int WAVE_COUNT = 5;
   
   struct Wave {
     float amplitude;
@@ -22,7 +22,7 @@ const oceanVertexShader = `
   void initWaves() {
     // Large rolling waves
     waves[0] = Wave(
-      0.8,                    // amplitude
+      1.2,                    // amplitude
       0.02,                   // frequency
       0.5,                    // phase
       normalize(vec2(1, 1))   // direction
@@ -30,15 +30,15 @@ const oceanVertexShader = `
     
     // Medium choppy waves
     waves[1] = Wave(
-      0.3,
-      0.05,
-      1.0,
+      0.5,
+      0.06,
+      1.2,
       normalize(vec2(-0.7, 0.3))
     );
     
     // Small ripples
     waves[2] = Wave(
-      0.1,
+      0.2,
       0.15,
       0.8,
       normalize(vec2(0.3, -0.7))
@@ -46,10 +46,18 @@ const oceanVertexShader = `
     
     // Tiny surface detail
     waves[3] = Wave(
-      0.05,
+      0.1,
       0.3,
-      1.2,
+      1.5,
       normalize(vec2(-0.2, -0.9))
+    );
+    
+    // Additional surface detail
+    waves[4] = Wave(
+      0.05,
+      0.4,
+      1.8,
+      normalize(vec2(0.5, 0.5))
     );
   }
   
@@ -108,21 +116,21 @@ const oceanFragmentShader = `
     vec3 viewDir = normalize(cameraPosition - vPosition);
     float fresnelFactor = fresnel(vNormal, viewDir);
     
-    // Base ocean color
-    vec3 color = mix(deepColor, oceanColor, vNormal.y * 0.5 + 0.5);
+    // More intense base ocean color with stronger blending
+    vec3 color = mix(deepColor, oceanColor, vNormal.y * 0.7 + 0.3);
     
-    // Add foam based on wave height and slope
-    float foamFactor = pow(max(0.0, vNormal.y), 4.0);
-    color = mix(color, foamColor, foamFactor * 0.3);
+    // Add foam based on wave height and slope with higher intensity
+    float foamFactor = pow(max(0.0, vNormal.y), 2.0); // Less power means more foam
+    color = mix(color, foamColor, foamFactor * 0.4); // Increased foam intensity
     
-    // Add fresnel reflection
-    color = mix(color, foamColor, fresnelFactor * 0.5);
+    // Add fresnel reflection with higher intensity
+    color = mix(color, foamColor, fresnelFactor * 0.7); // Increased fresnel factor
     
-    // Add sparkles
-    float sparkle = pow(max(0.0, dot(vNormal, vec3(0.0, 1.0, 0.0))), 20.0);
-    sparkle *= sin(vPosition.x * 10.0 + time) * 0.5 + 0.5;
-    sparkle *= sin(vPosition.z * 12.0 + time * 1.1) * 0.5 + 0.5;
-    color += foamColor * sparkle * 0.2;
+    // Add more visible sparkles
+    float sparkle = pow(max(0.0, dot(vNormal, vec3(0.0, 1.0, 0.0))), 15.0);
+    sparkle *= sin(vPosition.x * 12.0 + time * 1.2) * 0.5 + 0.5;
+    sparkle *= sin(vPosition.z * 15.0 + time * 1.3) * 0.5 + 0.5;
+    color += foamColor * sparkle * 0.4; // Double sparkle intensity
     
     gl_FragColor = vec4(color, 1.0);
   }
@@ -131,20 +139,20 @@ const oceanFragmentShader = `
 export class Ocean {
   constructor() {
     // Ocean properties
-    this.size = 1000;
-    this.segments = 128;
-    this.waveHeight = 1.2; // Increased wave height for more dramatic waves
-    this.waveSpeed = 0.5;  // Slightly faster waves
-    this.waveFrequency = 0.025; // Adjusted frequency
+    this.size = 20000; // Much larger ocean
+    this.segments = 200; // More segments for better detail
+    this.waveHeight = 2.5; // Bigger waves
+    this.waveSpeed = 0.8; // Faster waves
+    this.waveFrequency = 0.04; // Slightly higher frequency
     
     // Animation properties
     this.time = 0;
 
     this.uniforms = {
       time: { value: 0 },
-      oceanColor: { value: new THREE.Color(0x0077be) },  // More saturated blue
-      foamColor: { value: new THREE.Color(0xffffff) },   // White foam
-      deepColor: { value: new THREE.Color(0x00487d) }    // Richer deep blue
+      oceanColor: { value: new THREE.Color(0x1E90FF) }, // Brighter blue
+      foamColor: { value: new THREE.Color(0xFFFFFF) },  // Pure white foam
+      deepColor: { value: new THREE.Color(0x0D47A1) }   // Deeper blue for contrast
     };
   }
   
@@ -172,22 +180,28 @@ export class Ocean {
       uniforms: this.uniforms,
       vertexShader: oceanVertexShader,
       fragmentShader: oceanFragmentShader,
-      transparent: true,
+      transparent: false, // Better performance
       side: THREE.DoubleSide
     });
     
     // Create mesh
     this.mesh = new THREE.Mesh(geometry, material);
     
+    // Position the ocean at sea level
+    this.mesh.position.y = -20;
+    
     // Enable shadows
     this.mesh.receiveShadow = true;
+    
+    // Set render order to ensure it's drawn correctly
+    this.mesh.renderOrder = -1;
     
     return true;
   }
   
   update(delta) {
     // Update time for wave animation
-    this.time += delta;
+    this.time += delta * this.waveSpeed;
     
     // Update shader uniform
     if (this.mesh && this.mesh.material.uniforms) {

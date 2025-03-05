@@ -165,7 +165,7 @@ export class HUD {
 
     // Update health
     if (this.game.ship) {
-      const health = this.game.ship.health;
+      const health = this.game.ship.health || 100;
       this.healthBar.style.width = `${health}%`;
       this.healthText.textContent = `Health: ${Math.round(health)}%`;
       
@@ -181,21 +181,24 @@ export class HUD {
     
     // Update online count - only show other players
     const onlineCount = this.game.socketManager ? this.game.socketManager.otherPlayers.size : 0;
-    this.onlineCount.textContent = `Online: ${onlineCount}`;
+    this.onlineCount.textContent = `Online: ${onlineCount + 1}`; // +1 to include the player
     
     // Update score
-    this.scoreText.textContent = `Score: ${this.game.score}`;
+    const score = this.game.score || 0;
+    this.scoreText.textContent = `Score: ${score}`;
     
     // Update cooldowns
     const now = Date.now();
     const inputManager = this.game.inputManager;
     
-    // Left cannon cooldown
-    const leftProgress = Math.min(1, (now - inputManager.lastLeftCannonFire) / inputManager.cannonCooldown);
-    this.leftCooldown.style.height = `${leftProgress * 100}%`;
-    
-    // Right cannon cooldown
-    const rightProgress = Math.min(1, (now - inputManager.lastRightCannonFire) / inputManager.cannonCooldown);
-    this.rightCooldown.style.height = `${rightProgress * 100}%`;
+    if (inputManager) {
+      // Left cannon cooldown
+      const leftProgress = Math.min(1, (now - (inputManager.lastLeftCannonFire || 0)) / (inputManager.cannonCooldown || 1000));
+      this.leftCooldown.style.height = `${leftProgress * 100}%`;
+      
+      // Right cannon cooldown
+      const rightProgress = Math.min(1, (now - (inputManager.lastRightCannonFire || 0)) / (inputManager.cannonCooldown || 1000));
+      this.rightCooldown.style.height = `${rightProgress * 100}%`;
+    }
   }
 } 

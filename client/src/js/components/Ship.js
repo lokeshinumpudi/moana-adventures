@@ -6,8 +6,8 @@ export class Ship {
   constructor(inputManager = null) {
     // Ship properties
     this.speed = 0;
-    this.maxSpeed = 15;
-    this.acceleration = 10;
+    this.maxSpeed = 105;
+    this.acceleration = 20;
     this.rotationSpeed = 2;
     this.collisionRadius = 3.5;
     this.velocity = new THREE.Vector3();
@@ -17,12 +17,29 @@ export class Ship {
     // Create a group for the ship and its parts
     this.mesh = new THREE.Group();
     
-    // Cannon cooldowns
-    this.lastLeftFire = 0;
-    this.lastRightFire = 0;
-    this.lastFrontFire = 0;
-    this.cannonCooldown = 3000; // 3 seconds for heavy cannons
-    this.machineGunCooldown = 200; // 0.2 seconds for machine guns
+    // Weapon settings - single source of truth
+    this.weaponSettings = {
+      cannon: {
+        cooldown: 10,
+        speed: 30,
+        size: 0.3,
+        damage: 10
+      },
+      machineGun: {
+        cooldown: 10,
+        speed: 50,
+        size: 0.1,
+        damage: 1,
+        spread: 0.05
+      }
+    };
+    
+    // Cooldown tracking
+    this.lastFired = {
+      left: 0,
+      right: 0,
+      front: 0
+    };
     
     // Unique ID for this ship
     this.id = uuidv4();
@@ -44,355 +61,182 @@ export class Ship {
   }
   
   async createShipMesh() {
-    // Create a more detailed Polynesian outrigger canoe inspired by Moana
-    
-    // Main hull (more curved and detailed)
-    const hullShape = new THREE.Shape();
-    hullShape.moveTo(-1.5, 0);
-    hullShape.bezierCurveTo(-1.5, 1, -1, 2, 0, 2);
-    hullShape.bezierCurveTo(1, 2, 1.5, 1, 1.5, 0);
-    
-    const extrudeSettings = {
-      steps: 1,
-      depth: 7,
-      bevelEnabled: true,
-      bevelThickness: 0.2,
-      bevelSize: 0.3,
-      bevelSegments: 3
-    };
-    
-    const hullGeometry = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
-    hullGeometry.rotateX(Math.PI / 2);
-    
-    const woodTexture = new THREE.TextureLoader().load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/hardwood2_diffuse.jpg');
-    woodTexture.wrapS = THREE.RepeatWrapping;
-    woodTexture.wrapT = THREE.RepeatWrapping;
-    woodTexture.repeat.set(2, 1);
-    
+    // Create a simplified ship model
+
+    // Main hull - simple rectangular shape
+    const hullGeometry = new THREE.BoxGeometry(7, 1.5, 12);
     const hullMaterial = new THREE.MeshStandardMaterial({ 
-      map: woodTexture,
-      color: 0x8B4513,
+      color: 0x8B4513, // Brown
       roughness: 0.7,
       metalness: 0.1
     });
+    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+    hull.position.y = 0.5;
+    this.mesh.add(hull);
     
-    this.hull = new THREE.Mesh(hullGeometry, hullMaterial);
-    this.hull.position.y = 0.3;
-    this.mesh.add(this.hull);
-    
-    // Hull decorations (carved patterns)
-    const decorGeometry = new THREE.PlaneGeometry(2.8, 6);
-    const decorMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x5D4037,
-      roughness: 0.8,
-      metalness: 0.1,
-      side: THREE.DoubleSide
-    });
-    
-    const leftDecor = new THREE.Mesh(decorGeometry, decorMaterial);
-    leftDecor.position.set(-1.45, 0.7, 0);
-    leftDecor.rotation.y = Math.PI / 2;
-    this.mesh.add(leftDecor);
-    
-    const rightDecor = new THREE.Mesh(decorGeometry, decorMaterial);
-    rightDecor.position.set(1.45, 0.7, 0);
-    rightDecor.rotation.y = -Math.PI / 2;
-    this.mesh.add(rightDecor);
-    
-    // Add tribal patterns to decorations using a bump map
-    // (In a real implementation, you'd use a dedicated texture for this)
-    
-    // Outrigger (more detailed with curved connectors)
-    const outriggerGeometry = new THREE.CylinderGeometry(0.4, 0.4, 5, 8);
-    outriggerGeometry.rotateZ(Math.PI / 2);
-    
-    const outriggerMaterial = new THREE.MeshStandardMaterial({ 
-      map: woodTexture,
-      color: 0x8B4513
-    });
-    
-    this.outrigger = new THREE.Mesh(outriggerGeometry, outriggerMaterial);
-    this.outrigger.position.set(-3.5, 0.4, 0);
-    this.mesh.add(this.outrigger);
-    
-    // Curved outrigger connectors
-    const connectorCount = 3;
-    for (let i = 0; i < connectorCount; i++) {
-      const connectorGeometry = new THREE.BoxGeometry(0.2, 0.2, 3.5);
-      
-      // Create curved connector using multiple segments
-      const connector = new THREE.Group();
-      const segments = 5;
-      
-      for (let j = 0; j < segments; j++) {
-        const segment = new THREE.Mesh(
-          new THREE.BoxGeometry(0.2, 0.2, 3.5 / segments),
-          outriggerMaterial
-        );
-        
-        // Position each segment along a curve
-        const angle = (j / segments) * Math.PI * 0.2; // Slight curve
-        const radius = 3.5;
-        segment.position.set(
-          -radius * Math.sin(angle) / 2,
-          0.2 * Math.sin(angle * 2),
-          0
-        );
-        segment.rotation.z = angle;
-        
-        connector.add(segment);
-      }
-      
-      // Position connector along the ship
-      connector.position.set(-1.6, 0.7, -2.5 + i * 2.5);
-      this.mesh.add(connector);
-    }
-    
-    // Detailed mast
-    const mastGeometry = new THREE.CylinderGeometry(0.1, 0.15, 6, 8);
+    // Add a mast
+    const mastGeometry = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
     const mastMaterial = new THREE.MeshStandardMaterial({ 
-      map: woodTexture,
-      color: 0x8B4513, 
-      roughness: 0.6
+      color: 0x8B4513, // Brown
+      roughness: 0.8 
     });
+    const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+    mast.position.set(0, 4.5, 0);
+    this.mesh.add(mast);
     
-    this.mast = new THREE.Mesh(mastGeometry, mastMaterial);
-    this.mast.position.set(0, 3.5, -0.5);
-    this.mast.rotation.x = Math.PI * 0.05; // Slightly tilted
-    this.mesh.add(this.mast);
-    
-    // Add cross beam near top of mast
-    const crossBeamGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
-    crossBeamGeometry.rotateZ(Math.PI / 2);
-    const crossBeam = new THREE.Mesh(crossBeamGeometry, mastMaterial);
-    crossBeam.position.y = 5;
-    this.mast.add(crossBeam);
-    
-    // Improved sail with cloth-like texture and ropes
-    const sailGeometry = new THREE.PlaneGeometry(4, 5, 8, 8);
-    
-    // Modify sail vertices to make it look like it's billowing in the wind
-    const positions = sailGeometry.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-      const x = positions.getX(i);
-      const y = positions.getY(i);
-      
-      // Add wave pattern to simulate cloth
-      positions.setZ(i, Math.sin(y * 1.5) * 0.2 * (1 - Math.abs(x) / 2));
-    }
-    
-    sailGeometry.computeVertexNormals();
-    
+    // Add a sail
+    const sailGeometry = new THREE.PlaneGeometry(6, 7);
     const sailMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xECEFF1,
+      color: 0xF5F5DC, // Beige
       side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.9,
-      roughness: 0.8
+      roughness: 0.5
     });
+    const sail = new THREE.Mesh(sailGeometry, sailMaterial);
+    sail.position.set(0, 4, 2);
+    sail.rotation.y = Math.PI / 2;
+    this.mesh.add(sail);
     
-    // Add a design to the sail
-    const spiralGeometry = new THREE.RingGeometry(0.5, 1.5, 32);
-    const spiralMaterial = new THREE.MeshBasicMaterial({
-      color: 0xE57373,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8
-    });
+    // Add cannons
+    this.createSimpleCannons();
     
-    this.sail = new THREE.Mesh(sailGeometry, sailMaterial);
-    this.sail.position.set(1.5, 3, -0.5);
-    this.sail.rotation.y = Math.PI / 2;
-    this.mesh.add(this.sail);
+    // Add a cute character
+    this.addCuteCharacter();
     
-    const sailDesign = new THREE.Mesh(spiralGeometry, spiralMaterial);
-    sailDesign.position.z = 0.01;
-    sailDesign.rotation.x = Math.PI / 6;
-    this.sail.add(sailDesign);
+    // Set up character position
+    this.characterPosition = new THREE.Vector3(0, 1.7, 0);
     
-    // Add ropes from mast to sail
-    const ropeGeometry = new THREE.CylinderGeometry(0.02, 0.02, 3, 4);
-    const ropeMaterial = new THREE.MeshStandardMaterial({ color: 0xD7CCC8 });
+    // Collision body
+    this.collisionRadius = 6;
     
-    const topRope = new THREE.Mesh(ropeGeometry, ropeMaterial);
-    topRope.position.set(0.8, 4.8, -0.5);
-    topRope.rotation.z = Math.PI / 2.5;
-    this.mesh.add(topRope);
+    // Set up health
+    this.health = 100;
     
-    const bottomRope = new THREE.Mesh(ropeGeometry, ropeMaterial);
-    bottomRope.position.set(0.8, 2, -0.5);
-    bottomRope.rotation.z = Math.PI / 4;
-    this.mesh.add(bottomRope);
-    
-    // Main cannons (larger, more detailed)
-    this.leftCannon = this.createCannon(true);
-    this.leftCannon.position.set(-1.4, 1, -1.5);
-    this.leftCannon.rotation.y = -Math.PI / 2;
-    this.mesh.add(this.leftCannon);
-    
-    this.rightCannon = this.createCannon(true);
-    this.rightCannon.position.set(1.4, 1, -1.5);
-    this.rightCannon.rotation.y = Math.PI / 2;
-    this.mesh.add(this.rightCannon);
-    
-    // Add machine guns (smaller, faster)
-    this.machineGuns.left = this.createCannon(false);
-    this.machineGuns.left.position.set(-1.4, 1, 0.5);
-    this.machineGuns.left.rotation.y = -Math.PI / 2;
-    this.mesh.add(this.machineGuns.left);
-    
-    this.machineGuns.right = this.createCannon(false);
-    this.machineGuns.right.position.set(1.4, 1, 0.5);
-    this.machineGuns.right.rotation.y = Math.PI / 2;
-    this.mesh.add(this.machineGuns.right);
-    
-    // Front machine gun
-    this.machineGuns.front = this.createCannon(false);
-    this.machineGuns.front.position.set(0, 1, -3);
-    this.mesh.add(this.machineGuns.front);
-    
-    // Add detailed deck
-    const deckGeometry = new THREE.BoxGeometry(2.5, 0.2, 6);
-    const deckMaterial = new THREE.MeshStandardMaterial({ 
-      map: woodTexture,
-      color: 0xA1887F,
-      roughness: 0.6
-    });
-    
-    const deck = new THREE.Mesh(deckGeometry, deckMaterial);
-    deck.position.y = 1.2;
-    this.mesh.add(deck);
-    
-    // Add some crates and barrels for decoration
-    const crateGeometry = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-    const crateMaterial = new THREE.MeshStandardMaterial({ color: 0x8D6E63 });
-    
-    const crate1 = new THREE.Mesh(crateGeometry, crateMaterial);
-    crate1.position.set(0.6, 1.5, 1.5);
-    crate1.rotation.y = Math.PI * 0.2;
-    this.mesh.add(crate1);
-    
-    const barrelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
-    const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x6D4C41 });
-    
-    const barrel1 = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel1.position.set(-0.7, 1.5, 1.5);
-    this.mesh.add(barrel1);
-    
-    // Add decorative flags
-    const flagGeometry = new THREE.PlaneGeometry(0.6, 0.4);
-    const flagMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xF44336,
-      side: THREE.DoubleSide
-    });
-    
-    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-    flag.position.set(0, 6, -0.5);
-    flag.rotation.y = Math.PI / 4;
-    this.mast.add(flag);
-    
-    // Add shadow casting to all parts
-    this.mesh.traverse(child => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    
-    return true;
+    return this.mesh;
   }
   
-  createCannon(isMainCannon) {
-    const cannonGroup = new THREE.Group();
+  addCuteCharacter() {
+    // Create a cute character group
+    this.character = new THREE.Group();
     
-    // Canon barrel (cylindrical for main cannons, rectangular for machine guns)
-    let barrelGeometry, barrelMaterial;
-    
-    if (isMainCannon) {
-      // Main cannon (larger)
-      barrelGeometry = new THREE.CylinderGeometry(0.25, 0.3, 1.5, 12);
-      barrelGeometry.rotateZ(Math.PI / 2);
-      barrelMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x333333,
-        roughness: 0.7,
-        metalness: 0.8
-      });
-    } else {
-      // Machine gun (smaller)
-      barrelGeometry = new THREE.BoxGeometry(1, 0.12, 0.12);
-      barrelMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x555555,
-        roughness: 0.4,
-        metalness: 0.9
-      });
-    }
-    
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.position.set(0, 0, 0);
-    cannonGroup.add(barrel);
-    
-    // Add muzzle detail
-    if (isMainCannon) {
-      const muzzleGeometry = new THREE.CylinderGeometry(0.32, 0.32, 0.1, 12);
-      muzzleGeometry.rotateZ(Math.PI / 2);
-      const muzzle = new THREE.Mesh(muzzleGeometry, barrelMaterial);
-      muzzle.position.x = 0.75;
-      cannonGroup.add(muzzle);
-    } else {
-      // Add machine gun muzzle flash (will be toggled during firing)
-      const muzzleFlashGeometry = new THREE.ConeGeometry(0.1, 0.2, 8);
-      muzzleFlashGeometry.rotateZ(Math.PI / 2);
-      const muzzleFlashMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xFFC107,
-        transparent: true,
-        opacity: 0.8
-      });
-      
-      const muzzleFlash = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
-      muzzleFlash.position.x = 0.6;
-      muzzleFlash.visible = false;
-      cannonGroup.add(muzzleFlash);
-      
-      // Store reference to toggle during firing
-      cannonGroup.muzzleFlash = muzzleFlash;
-    }
-    
-    // Cannon base 
-    const baseGeometry = isMainCannon 
-      ? new THREE.BoxGeometry(1, 0.5, 0.8)
-      : new THREE.BoxGeometry(0.5, 0.3, 0.4);
-      
-    const baseMaterial = new THREE.MeshStandardMaterial({ 
-      color: isMainCannon ? 0x8B4513 : 0x5D4037,
-      roughness: 0.6
+    // Body - a simple sphere with bright color
+    const bodyGeometry = new THREE.SphereGeometry(0.4, 12, 12);
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x4CAF50, // Bright green
+      roughness: 0.5,
+      metalness: 0.2
     });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    this.character.add(body);
     
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.position.set(isMainCannon ? 0 : 0, -0.3, 0);
-    cannonGroup.add(base);
+    // Head - slightly smaller sphere
+    const headGeometry = new THREE.SphereGeometry(0.3, 12, 12);
+    const headMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFFF59D, // Light yellow
+      roughness: 0.5
+    });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.y = 0.5;
+    this.character.add(head);
     
-    // Add mounting wheels for main cannons
-    if (isMainCannon) {
-      for (let i = -1; i <= 1; i += 2) {
-        const wheelGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 12);
-        const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x5D4037 });
-        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-        wheel.position.set(0, -0.3, i * 0.4);
-        wheel.rotation.x = Math.PI / 2;
-        cannonGroup.add(wheel);
-      }
-    }
+    // Eyes
+    const eyeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
     
-    // Tag the cannon type for later reference
-    cannonGroup.isMainCannon = isMainCannon;
+    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    leftEye.position.set(-0.1, 0.55, 0.25);
+    this.character.add(leftEye);
     
-    return cannonGroup;
+    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    rightEye.position.set(0.1, 0.55, 0.25);
+    this.character.add(rightEye);
+    
+    // Smile
+    const smileGeometry = new THREE.TorusGeometry(0.1, 0.02, 8, 10, Math.PI);
+    const smileMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const smile = new THREE.Mesh(smileGeometry, smileMaterial);
+    smile.position.set(0, 0.45, 0.25);
+    smile.rotation.x = Math.PI / 2;
+    smile.rotation.z = Math.PI;
+    this.character.add(smile);
+    
+    // Arms
+    const armGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8);
+    const armMaterial = new THREE.MeshStandardMaterial({ color: 0x4CAF50 });
+    
+    const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+    leftArm.position.set(-0.4, 0.1, 0);
+    leftArm.rotation.z = Math.PI / 3;
+    this.character.add(leftArm);
+    
+    const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+    rightArm.position.set(0.4, 0.1, 0);
+    rightArm.rotation.z = -Math.PI / 3;
+    this.character.add(rightArm);
+    
+    // Position the character on the ship
+    this.character.position.set(0, 1.7, -2);
+    this.character.rotation.y = Math.PI; // Face back of the ship
+    
+    this.mesh.add(this.character);
+  }
+  
+  createSimpleCannons() {
+    // Left cannon
+    const leftCannonGeometry = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
+    leftCannonGeometry.rotateZ(Math.PI / 2);
+    const cannonMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    
+    this.leftCannon = new THREE.Mesh(leftCannonGeometry, cannonMaterial);
+    this.leftCannon.position.set(-3.5, 1, 0);
+    this.leftCannon.rotation.y = -Math.PI / 2; // Rotate to point left
+    this.mesh.add(this.leftCannon);
+    
+    // Right cannon
+    this.rightCannon = new THREE.Mesh(leftCannonGeometry.clone(), cannonMaterial);
+    this.rightCannon.position.set(3.5, 1, 0);
+    this.rightCannon.rotation.y = Math.PI / 2; // Rotate to point right
+    this.mesh.add(this.rightCannon);
+    
+    // Front cannon
+    const frontCannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 8);
+    frontCannonGeometry.rotateX(Math.PI / 2);
+    this.frontCannon = new THREE.Mesh(frontCannonGeometry, cannonMaterial);
+    this.frontCannon.position.set(0, 1, 6);
+    this.frontCannon.rotation.y = 0; // Explicitly set to face forward
+    this.mesh.add(this.frontCannon);
+    
+    // Initialize empty machineGuns object for compatibility
+    this.machineGuns = {
+      left: this.leftCannon,
+      right: this.rightCannon,
+      front: this.frontCannon
+    };
   }
   
   update(delta, inputManager = null) {
-    // Use provided inputManager or fallback to instance inputManager
+    // Use provided inputManager or the stored one
     const input = inputManager || this.inputManager;
+    
     if (!input) return;
+    
+    // Animate the character if it exists
+    if (this.character) {
+      // Gentle bobbing motion
+      this.character.position.y = 1.7 + Math.sin(Date.now() * 0.002) * 0.05;
+      
+      // Animate arms when moving
+      if (input.isMovingForward()) {
+        const armSpeed = 2;
+        this.character.children.forEach(child => {
+          // Find arm meshes
+          if (child.position.x === -0.4 || child.position.x === 0.4) {
+            // Swing arms back and forth
+            child.rotation.z = (child.position.x < 0 ? 1 : -1) * 
+              (Math.PI / 3 + Math.sin(Date.now() * 0.005 * armSpeed) * 0.3);
+          }
+        });
+      }
+    }
     
     // Handle rotation
     if (input.isTurningLeft()) {
@@ -402,64 +246,57 @@ export class Ship {
       this.mesh.rotation.y -= this.rotationSpeed * delta;
     }
     
-    // Update direction vector based on rotation
-    this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-    
-    // Handle acceleration and deceleration
+    // Handle forward/backward movement
+    let speedChange = 0;
     if (input.isMovingForward()) {
-      this.speed = Math.min(this.speed + this.acceleration * delta, this.maxSpeed);
-    } else if (input.isMovingBackward()) {
-      this.speed = Math.max(this.speed - this.acceleration * delta, -this.maxSpeed / 2);
-    } else {
-      // Decelerate when no input
-      if (this.speed > 0) {
-        this.speed = Math.max(0, this.speed - this.acceleration * delta / 2);
-      } else if (this.speed < 0) {
-        this.speed = Math.min(0, this.speed + this.acceleration * delta / 2);
-      }
+      speedChange = this.acceleration * delta;
+    }
+    if (input.isMovingBackward()) {
+      speedChange = -this.acceleration * delta;
     }
     
-    // Update velocity based on direction and speed
-    this.velocity.copy(this.direction).multiplyScalar(this.speed * delta);
+    // Update speed
+    this.speed = Math.max(0, Math.min(this.maxSpeed, this.speed + speedChange));
     
-    // Update position
-    this.mesh.position.add(this.velocity);
-    
-    // Animate sail based on speed
-    if (this.sail) {
-      const sailWave = Math.sin(Date.now() / 500) * 0.1 * (this.speed / this.maxSpeed);
-      this.sail.rotation.z = sailWave;
+    // Apply velocity based on ship's orientation
+    if (this.speed > 0 || speedChange < 0) {
+      // Calculate forward direction
+      this.direction.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
       
-      // Add realistic sail billowing by modifying vertices
-      if (this.sail.geometry.attributes && this.sail.geometry.attributes.position) {
-        const positions = this.sail.geometry.attributes.position.array;
-        const count = positions.length / 3;
-        
-        for (let i = 0; i < count; i++) {
-          const i3 = i * 3;
-          const x = positions[i3];
-          const y = positions[i3 + 1];
-          
-          // Add dynamic billowing effect
-          positions[i3 + 2] = Math.sin(y * 1.5 + Date.now() / 1000) * 0.2 * (1 - Math.abs(x) / 2) * (this.speed / this.maxSpeed);
-        }
-        
-        this.sail.geometry.attributes.position.needsUpdate = true;
-        this.sail.geometry.computeVertexNormals();
-      }
+      // Apply velocity
+      this.velocity.copy(this.direction).multiplyScalar(this.speed);
+      
+      // Apply to mesh position
+      this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
     }
     
-    // Add gentle bobbing on waves
-    const bobHeight = Math.sin(Date.now() / 1000) * 0.15;
-    this.mesh.position.y = bobHeight + 0.5;
+    // Apply physics - add a little drag
+    this.speed *= 0.99;
     
-    // Gentle roll based on turning
-    const rollAngle = input.isTurningLeft() ? 0.15 : (input.isTurningRight() ? -0.15 : 0);
-    this.mesh.rotation.z = rollAngle * (this.speed / this.maxSpeed);
+    // Apply rocking motion based on speed and wave height
+    const pitchAmount = this.speed * 0.003; // More speed = more pitch
+    const rollAmount = 0.02; // Constant roll amount
     
-    // Pitch based on speed
-    const pitchAngle = (this.speed / this.maxSpeed) * 0.1;
+    // Calculate pitch and roll angles
+    const time = Date.now() * 0.001;
+    const pitchAngle = Math.sin(time * 0.5) * pitchAmount;
+    const rollAngle = Math.sin(time * 0.7) * rollAmount;
+    
+    // Apply pitch and roll
     this.mesh.rotation.x = pitchAngle;
+  }
+  
+  takeDamage(amount) {
+    // Make sure health exists
+    if (this.health === undefined) {
+      this.health = 100;
+    }
+    
+    // Reduce health
+    this.health = Math.max(0, this.health - amount);
+    
+    // Return true if still alive
+    return this.health > 0;
   }
   
   fireProjectile(side) {
@@ -471,21 +308,21 @@ export class Ship {
     
     if (side === 'left') {
       cannon = this.leftCannon;
-      cooldown = now - this.lastLeftFire < this.cannonCooldown;
+      cooldown = now - this.lastFired.left < this.weaponSettings.cannon.cooldown;
     } else if (side === 'right') {
       cannon = this.rightCannon;
-      cooldown = now - this.lastRightFire < this.cannonCooldown;
+      cooldown = now - this.lastFired.right < this.weaponSettings.cannon.cooldown;
     } else if (side === 'left-machine') {
       cannon = this.machineGuns.left;
-      cooldown = now - this.lastLeftFire < this.machineGunCooldown;
+      cooldown = now - this.lastFired.left < this.weaponSettings.machineGun.cooldown;
       isMachineGun = true;
     } else if (side === 'right-machine') {
       cannon = this.machineGuns.right;
-      cooldown = now - this.lastRightFire < this.machineGunCooldown;
+      cooldown = now - this.lastFired.right < this.weaponSettings.machineGun.cooldown;
       isMachineGun = true;
     } else if (side === 'front') {
       cannon = this.machineGuns.front;
-      cooldown = now - this.lastFrontFire < this.machineGunCooldown;
+      cooldown = now - this.lastFired.front < this.weaponSettings.machineGun.cooldown;
       isMachineGun = true;
     }
     
@@ -515,13 +352,13 @@ export class Ship {
     const projectile = new Projectile(
       cannonWorldPos, 
       direction, 
-      isMachineGun ? 0.15 : 0.3, // Size
-      isMachineGun ? 40 : 30     // Speed
+      isMachineGun ? this.weaponSettings.machineGun.size : this.weaponSettings.cannon.size, // Size
+      isMachineGun ? this.weaponSettings.machineGun.speed : this.weaponSettings.cannon.speed     // Speed
     );
     
     // Add random spread for machine guns
     if (isMachineGun) {
-      const spread = 0.05;
+      const spread = this.weaponSettings.machineGun.spread;
       projectile.velocity.x += (Math.random() - 0.5) * spread;
       projectile.velocity.y += (Math.random() - 0.5) * spread;
       projectile.velocity.z += (Math.random() - 0.5) * spread;
@@ -537,11 +374,11 @@ export class Ship {
     
     // Update cooldown timer
     if (side === 'left' || side === 'left-machine') {
-      this.lastLeftFire = now;
+      this.lastFired.left = now;
     } else if (side === 'right' || side === 'right-machine') {
-      this.lastRightFire = now;
+      this.lastFired.right = now;
     } else if (side === 'front') {
-      this.lastFrontFire = now;
+      this.lastFired.front = now;
     }
     
     return projectile;

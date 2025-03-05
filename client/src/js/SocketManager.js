@@ -658,27 +658,35 @@ export class SocketManager {
     
     // Flash the ship to indicate damage
     if (this.game.ship) {
+      // Take damage
+      const stillAlive = this.game.ship.takeDamage(data.damage || 10);
+      
       // Make the ship flash red briefly
       const originalMaterials = [];
-      const shipParts = this.game.ship.getMeshes();
+      const shipParts = [];
+      
+      // Collect all ship meshes
+      this.game.ship.mesh.traverse(child => {
+        if (child.isMesh && child.material) {
+          shipParts.push(child);
+        }
+      });
       
       // Store original materials and set to red
       shipParts.forEach(part => {
-        if (part.material) {
-          originalMaterials.push({
-            mesh: part,
-            material: part.material.clone()
-          });
-          
-          // Create a red material
-          const flashMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff0000,
-            emissive: 0xff0000,
-            emissiveIntensity: 0.5
-          });
-          
-          part.material = flashMaterial;
-        }
+        originalMaterials.push({
+          mesh: part,
+          material: part.material.clone()
+        });
+        
+        // Create a red material
+        const flashMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+          emissive: 0xff0000,
+          emissiveIntensity: 0.5
+        });
+        
+        part.material = flashMaterial;
       });
       
       // Create hit effect particles at the hit position
@@ -689,7 +697,9 @@ export class SocketManager {
           data.position.z
         );
         
-        this.game.particleSystem.createExplosion(hitPosition, 0.5);
+        if (this.game.particleSystem) {
+          this.game.particleSystem.createExplosion(hitPosition, 0.5);
+        }
       }
       
       // Restore original materials after a short delay
@@ -699,9 +709,13 @@ export class SocketManager {
         });
       }, 100);
       
-      // Show damage in the HUD
-      if (this.game.hud) {
-        this.game.hud.updateHealth(data.damage);
+      // If the player died
+      if (!stillAlive) {
+        console.log('Player died!');
+        // Implement respawn logic here
+        setTimeout(() => {
+          this.game.ship.health = 100;
+        }, 3000);
       }
     }
   }

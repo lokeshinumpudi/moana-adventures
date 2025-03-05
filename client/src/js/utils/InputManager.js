@@ -19,15 +19,6 @@ export class InputManager {
     this.CAMERA_TOGGLE_KEYS = ['c'];
     this.CAMERA_PRESET_KEYS = ['1', '2', '3', '4'];
     
-    // Last cannon fire times for cooldowns
-    this.lastLeftCannonFire = 0;
-    this.lastRightCannonFire = 0;
-    this.lastFrontCannonFire = 0;
-    this.lastLeftMachineGunFire = 0;
-    this.lastRightMachineGunFire = 0;
-    this.cannonCooldown = 3000; // 3 seconds cooldown
-    this.machineGunCooldown = 200; // 0.2 seconds cooldown (5 shots per second)
-    
     // Automatic fire state
     this.autoFiringLeft = false;
     this.autoFiringRight = false;
@@ -53,9 +44,9 @@ export class InputManager {
     this.keys[event.key] = true;
     
     // Handle cannon fire on key press, not continuously
-    if (this.LEFT_CANNON_KEYS.includes(event.key)) {
+    if (this.RIGHT_CANNON_KEYS.includes(event.key)) {
       this.fireLeftCannon();
-    } else if (this.RIGHT_CANNON_KEYS.includes(event.key)) {
+    } else if (this.LEFT_CANNON_KEYS.includes(event.key)) {
       this.fireRightCannon();
     } else if (this.FRONT_CANNON_KEY.includes(event.key)) {
       this.fireFrontCannon();
@@ -146,19 +137,11 @@ export class InputManager {
   }
   
   fireLeftCannon() {
-    const now = Date.now();
-    if (now - this.lastLeftCannonFire > this.cannonCooldown) {
-      this.game.fireProjectile('left');
-      this.lastLeftCannonFire = now;
-    }
+    this.game.fireProjectile('left');
   }
   
   fireRightCannon() {
-    const now = Date.now();
-    if (now - this.lastRightCannonFire > this.cannonCooldown) {
-      this.game.fireProjectile('right');
-      this.lastRightCannonFire = now;
-    }
+    this.game.fireProjectile('right');
   }
   
   fireLeftMachineGun() {
@@ -170,7 +153,7 @@ export class InputManager {
   }
   
   fireFrontCannon() {
-    this.game.fireMachineGun('front');
+    this.game.fireProjectile('front');
   }
   
   isMovingForward() {
