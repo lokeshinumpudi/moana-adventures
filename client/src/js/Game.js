@@ -30,20 +30,17 @@ export class Game {
     
     // Set up cooldowns for firing
     this.lastCannonFireTime = 0;
-    this.cannonCooldown = 10; // Reduced from 1000ms to 300ms
+    this.cannonCooldown = 10;
     this.lastMachineGunFireTime = 0;
-    this.machineGunCooldown = 10; // Reduced from 100ms to 50ms
+    this.machineGunCooldown = 10;
     
     // Set up performance optimization properties
     this.lastProjectileUpdateTime = 0;
-    this.collisionCheckInterval = 100; // ms between collision checks
+    this.collisionCheckInterval = 100;
     this.lastCollisionCheckTime = 0;
     
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    
-    // Initialize HUD
-    this.hud = new HUD(this);
   }
   
   init() {
