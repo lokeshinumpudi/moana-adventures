@@ -1,33 +1,40 @@
 import * as THREE from 'three';
 
 export class Buoy {
-  constructor(type = 'start') {
+  constructor(options = {}) {
     // Buoy properties
-    this.type = type; // 'start' or 'finish'
+    this.type = options.type || 'normal';
+    this.order = options.order || 0;
     this.collisionRadius = 2;
     this.mesh = new THREE.Group();
+    
+    // Set position if provided
+    if (options.position) {
+      this.mesh.position.copy(options.position);
+    }
     
     // Animation properties
     this.bobHeight = 0.3;
     this.bobSpeed = 0.8;
     this.rotationSpeed = 0.2;
-    this.initialY = 0;
-    this.glowIntensity = 0;
-  }
-  
-  async init() {
-    // Create buoy mesh
-    this.createBuoyMesh();
-    
-    // Store initial Y position for bobbing animation
     this.initialY = this.mesh.position.y;
+    this.glowIntensity = 0;
     
-    return this;
+    // Create the buoy mesh immediately
+    this.createBuoyMesh();
   }
   
   createBuoyMesh() {
-    // Determine color based on type
-    const color = this.type === 'start' ? 0x2ecc71 : 0xe8902e;
+    // Determine color based on type or order
+    let color;
+    if (this.type === 'start') {
+      color = 0x2ecc71; // Green
+    } else if (this.type === 'finish') {
+      color = 0xe8902e; // Orange
+    } else {
+      // Use a color based on the buoy's order in the sequence
+      color = new THREE.Color().setHSL(this.order % 10 / 10, 0.8, 0.6).getHex();
+    }
     
     // Create buoy body
     const bodyGeometry = new THREE.CylinderGeometry(1, 1.5, 3, 16);
@@ -67,9 +74,6 @@ export class Buoy {
     light.position.y = 3;
     this.mesh.add(light);
     this.light = light;
-    
-    // Set floating height
-    this.mesh.position.y = 0;
   }
   
   update(delta) {

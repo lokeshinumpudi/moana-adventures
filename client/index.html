@@ -4,11 +4,52 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Moana's Wake: Pirate Pursuit</title>
-    <link rel="stylesheet" href="/src/css/hud.css">
   </head>
   <body>
     <div id="game-container">
-      <!-- HUD will be loaded here dynamically -->
+      <div id="ui-layer">
+        <!-- Stats Panel -->
+        <div class="stats-container">
+          <div class="score-display">Score: 0</div>
+          
+          <div class="health-bar-container">
+            <div class="health-bar-fill"></div>
+            <div class="health-bar-text">100 / 100</div>
+          </div>
+          
+          <div class="kills-display">Kills: 0</div>
+          <div class="online-count">Players Online: 1</div>
+          
+          <!-- Power-ups Container -->
+          <div class="powerups-container">
+            <!-- Power-ups will be added dynamically -->
+          </div>
+        </div>
+        
+        <!-- Minimap -->
+        <div id="mini-map-container">
+          <div class="minimap-background"></div>
+          <div id="blips-container"></div>
+          <div class="radar-sweep"></div>
+        </div>
+        
+        <!-- Notification Container -->
+        <div class="notification-container"></div>
+        
+        <!-- Loading & Restart UI -->
+        <div id="restart-container" class="hidden">
+          <button id="restart-button">Restart</button>
+        </div>
+        <div id="loading-screen">
+          <div class="loader"></div>
+          <p>Loading Moana's Wake...</p>
+        </div>
+        
+        <!-- Character Controls (Hidden by default) -->
+        <div id="character-controls" class="hidden">
+          <button id="return-to-ship-btn">Return to Ship</button>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

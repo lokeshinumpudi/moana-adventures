@@ -3,34 +3,30 @@ import { Projectile } from './Projectile.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class Ship {
-  constructor(inputManager = null) {
+  constructor(inputManager = null, game = null) {
     // Ship properties
     this.speed = 0;
-    this.maxSpeed = 75;
-    this.acceleration = 6;
+    this.maxSpeed = 105;
+    this.acceleration = 10;
     this.rotationSpeed = 2;
     this.collisionRadius = 3.5;
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3(0, 0, 1);
     this.inputManager = inputManager;
+    this.isDocked = false;
+    this.dockedAt = null;
+    this.game = game;
     
     // Create a group for the ship and its parts
     this.mesh = new THREE.Group();
     
-    // Weapon settings - single source of truth
+    // Weapon settings
     this.weaponSettings = {
       cannon: {
-        cooldown: 10,
+        cooldown: 1000,
         speed: 30,
         size: 0.3,
         damage: 10
-      },
-      machineGun: {
-        cooldown: 10,
-        speed: 50,
-        size: 0.1,
-        damage: 1,
-        spread: 0.05
       }
     };
     
@@ -44,268 +40,185 @@ export class Ship {
     // Unique ID for this ship
     this.id = uuidv4();
     
-    // Extras for detailed ship
-    this.detailParts = [];
-    this.machineGuns = {
-      front: null,
-      left: null,
-      right: null
-    };
-
-    // Initialize notification system
-    this.notifications = [];
-    this.notificationContainer = document.createElement('div');
-    this.notificationContainer.id = 'notification-container';
-    document.body.appendChild(this.notificationContainer);
+    // Health and damage
+    this.maxHealth = 100;
+    this.health = 100;
+    this.originalColor = new THREE.Color(0x8B4513);
+    
+    // Create single notification element
+    this.createNotificationElement();
   }
   
   async init() {
-    // Create a detailed outrigger canoe
-    await this.createShipMesh();
-    
+    this.createBasicShip();
     return this;
   }
   
-  async createShipMesh() {
-    // Create a simplified ship model
-
-    // Main hull - simple rectangular shape
-    const hullGeometry = new THREE.BoxGeometry(7, 1.5, 12);
+  createBasicShip() {
+    // Create the hull (main body of the ship)
+    const hullGeometry = new THREE.BoxGeometry(3, 1, 7);
     const hullMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x8B4513, // Brown
+      color: 0x8B4513,
       roughness: 0.7,
-      metalness: 0.1
+      metalness: 0.2
     });
     const hull = new THREE.Mesh(hullGeometry, hullMaterial);
-    hull.position.y = 0.5;
+    hull.castShadow = true;
+    hull.receiveShadow = true;
+    this.hull = hull;
     this.mesh.add(hull);
     
-    // Add a mast
-    const mastGeometry = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
+    // Create a mast
+    const mastGeometry = new THREE.CylinderGeometry(0.1, 0.1, 4, 8);
     const mastMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x8B4513, // Brown
+      color: 0x8B4513,
       roughness: 0.8 
     });
     const mast = new THREE.Mesh(mastGeometry, mastMaterial);
-    mast.position.set(0, 4.5, 0);
+    mast.position.set(0, 2.5, 0);
+    mast.castShadow = true;
     this.mesh.add(mast);
     
-    // Add a sail
-    const sailGeometry = new THREE.PlaneGeometry(6, 7);
+    // Create a sail
+    const sailGeometry = new THREE.PlaneGeometry(3, 3);
     const sailMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xF5F5DC, // Beige
+      color: 0xF5F5DC,
       side: THREE.DoubleSide,
       roughness: 0.5
     });
     const sail = new THREE.Mesh(sailGeometry, sailMaterial);
-    sail.position.set(0, 4, 2);
+    sail.position.set(0, 2.5, 0);
     sail.rotation.y = Math.PI / 2;
+    sail.castShadow = true;
     this.mesh.add(sail);
     
-    // Add cannons
-    this.createSimpleCannons();
+    // Create simple cannons
+    this.createCannons();
     
-    // Add a cute character
-    this.addCuteCharacter();
+    // Store original color for damage effect
+    this.originalColor = hullMaterial.color.clone();
     
-    // Set up character position
-    this.characterPosition = new THREE.Vector3(0, 1.7, 0);
-    
-    // Collision body
-    this.collisionRadius = 6;
-    
-    // Set up health
-    this.health = 100;
-    
-    return this.mesh;
+    console.log("Basic ship created", this.mesh);
   }
   
-  addCuteCharacter() {
-    // Create a cute character group
-    this.character = new THREE.Group();
-    
-    // Body - a simple sphere with bright color
-    const bodyGeometry = new THREE.SphereGeometry(0.4, 12, 12);
-    const bodyMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x4CAF50, // Bright green
-      roughness: 0.5,
-      metalness: 0.2
-    });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    this.character.add(body);
-    
-    // Head - slightly smaller sphere
-    const headGeometry = new THREE.SphereGeometry(0.3, 12, 12);
-    const headMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xFFF59D, // Light yellow
-      roughness: 0.5
-    });
-    const head = new THREE.Mesh(headGeometry, headMaterial);
-    head.position.y = 0.5;
-    this.character.add(head);
-    
-    // Eyes
-    const eyeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
-    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    
-    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.set(-0.1, 0.55, 0.25);
-    this.character.add(leftEye);
-    
-    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.set(0.1, 0.55, 0.25);
-    this.character.add(rightEye);
-    
-    // Smile
-    const smileGeometry = new THREE.TorusGeometry(0.1, 0.02, 8, 10, Math.PI);
-    const smileMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const smile = new THREE.Mesh(smileGeometry, smileMaterial);
-    smile.position.set(0, 0.45, 0.25);
-    smile.rotation.x = Math.PI / 2;
-    smile.rotation.z = Math.PI;
-    this.character.add(smile);
-    
-    // Arms
-    const armGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8);
-    const armMaterial = new THREE.MeshStandardMaterial({ color: 0x4CAF50 });
-    
-    const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-    leftArm.position.set(-0.4, 0.1, 0);
-    leftArm.rotation.z = Math.PI / 3;
-    this.character.add(leftArm);
-    
-    const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-    rightArm.position.set(0.4, 0.1, 0);
-    rightArm.rotation.z = -Math.PI / 3;
-    this.character.add(rightArm);
-    
-    // Position the character on the ship
-    this.character.position.set(0, 1.7, -2);
-    this.character.rotation.y = Math.PI; // Face back of the ship
-    
-    this.mesh.add(this.character);
-  }
-  
-  createSimpleCannons() {
-    // Left cannon
-    const leftCannonGeometry = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
-    leftCannonGeometry.rotateZ(Math.PI / 2);
+  createCannons() {
+    // Create cannon geometry
+    const cannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+    cannonGeometry.rotateZ(Math.PI / 2);
     const cannonMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
     
-    this.leftCannon = new THREE.Mesh(leftCannonGeometry, cannonMaterial);
-    this.leftCannon.position.set(-3.5, 1, 0);
-    this.leftCannon.rotation.y = -Math.PI / 2; // Rotate to point left
+    // Left cannon
+    this.leftCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
+    this.leftCannon.position.set(-1.7, 0.5, 0);
+    this.leftCannon.castShadow = true;
     this.mesh.add(this.leftCannon);
     
     // Right cannon
-    this.rightCannon = new THREE.Mesh(leftCannonGeometry.clone(), cannonMaterial);
-    this.rightCannon.position.set(3.5, 1, 0);
-    this.rightCannon.rotation.y = Math.PI / 2; // Rotate to point right
+    this.rightCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
+    this.rightCannon.position.set(1.7, 0.5, 0);
+    this.rightCannon.castShadow = true;
     this.mesh.add(this.rightCannon);
     
     // Front cannon
-    const frontCannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 8);
+    const frontCannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
     frontCannonGeometry.rotateX(Math.PI / 2);
     this.frontCannon = new THREE.Mesh(frontCannonGeometry, cannonMaterial);
-    this.frontCannon.position.set(0, 1, 6);
-    this.frontCannon.rotation.y = 0; // Explicitly set to face forward
+    this.frontCannon.position.set(0, 0.5, -3.5);
+    this.frontCannon.castShadow = true;
     this.mesh.add(this.frontCannon);
-    
-    // Initialize empty machineGuns object for compatibility
-    this.machineGuns = {
-      left: this.leftCannon,
-      right: this.rightCannon,
-      front: this.frontCannon
-    };
   }
   
   update(delta, inputManager = null) {
-    // Use provided inputManager or the stored one
-    const input = inputManager || this.inputManager;
-    
-    if (!input) return;
-    
-    // Animate the character if it exists
-    if (this.character) {
-      // Gentle bobbing motion
-      this.character.position.y = 1.7 + Math.sin(Date.now() * 0.002) * 0.05;
-      
-      // Animate arms when moving
-      if (input.isMovingForward() || input.isMovingBackward()) {
-        const armSpeed = 2;
-        this.character.children.forEach(child => {
-          // Find arm meshes
-          if (child.position.x === -0.4 || child.position.x === 0.4) {
-            // Swing arms back and forth
-            child.rotation.z = (child.position.x < 0 ? 1 : -1) * 
-              (Math.PI / 3 + Math.sin(Date.now() * 0.005 * armSpeed) * 0.3);
-          }
-        });
+    // If we have an input manager, update based on input
+    if (inputManager) {
+      // If explorer is active, don't process ship controls
+      if (this.game && this.game.explorer && this.game.explorer.isActive) {
+        // Don't process controls when explorer is active
+        // Apply deceleration to slow down gradually
+        if (Math.abs(this.speed) > 0.1) {
+          this.speed *= 0.95; // Slow down gradually
+        } else {
+          this.speed = 0; // Stop completely when slow enough
+        }
+      } else {
+        // Normal ship control processing
+        // Handle forward/backward movement
+        if (inputManager.keys['w'] || inputManager.keys['ArrowUp']) {
+          this.speed = Math.min(this.speed + this.acceleration * delta, this.maxSpeed);
+        } else if (inputManager.keys['s'] || inputManager.keys['ArrowDown']) {
+          this.speed = Math.max(this.speed - this.acceleration * delta, -this.maxSpeed / 2);
+        } else {
+          // Apply deceleration when no movement keys are pressed
+          if (Math.abs(this.speed) > 0.1) {
+            this.speed *= 0.98;
+          } else {
+            this.speed = 0;
       }
     }
     
     // Handle rotation
-    if (input.isTurningLeft()) {
+        if (inputManager.keys['a'] || inputManager.keys['ArrowLeft']) {
       this.mesh.rotation.y += this.rotationSpeed * delta;
     }
-    if (input.isTurningRight()) {
+        if (inputManager.keys['d'] || inputManager.keys['ArrowRight']) {
       this.mesh.rotation.y -= this.rotationSpeed * delta;
+        }
+      }
     }
     
-    // Handle forward/backward movement
-    let targetSpeed = 0;
+    // Update the direction based on rotation
+    this.direction.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     
-    if (input.isMovingForward()) {
-      targetSpeed = this.maxSpeed;
-    } else if (input.isMovingBackward()) {
-      targetSpeed = -this.maxSpeed * 0.5; // Half speed when moving backward
-    }
+    // Calculate velocity
+    this.velocity.copy(this.direction).multiplyScalar(this.speed * delta);
     
-    // Smoothly interpolate current speed to target speed
-    this.speed = THREE.MathUtils.lerp(this.speed, targetSpeed, this.acceleration * delta);
+    // Update position
+    this.mesh.position.add(this.velocity);
     
-    // Apply movement
-    if (Math.abs(this.speed) > 0.01) {
-      // Get forward direction from ship's rotation
-      const forward = new THREE.Vector3(0, 0, 1);
-      forward.applyQuaternion(this.mesh.quaternion);
-      
-      // Update position
-      this.mesh.position.x += forward.x * this.speed * delta;
-      this.mesh.position.z += forward.z * this.speed * delta;
-    }
-    
-    // Apply physics - add a little drag
-    this.speed *= 0.99;
-    
-    // Apply rocking motion based on speed and wave height
-    const pitchAmount = this.speed * 0.003; // More speed = more pitch
-    const rollAmount = 0.02; // Constant roll amount
-    
-    // Calculate pitch and roll angles
+    // Make the ship float on water
+    // Calculate wave height based on position and time
     const time = Date.now() * 0.001;
-    const pitchAngle = Math.sin(time * 0.5) * pitchAmount;
-    const rollAngle = Math.sin(time * 0.7) * rollAmount;
+    const waveHeight = this.calculateWaveHeight(this.mesh.position.x, this.mesh.position.z, time);
     
-    // Apply pitch and roll
-    this.mesh.rotation.x = pitchAngle;
+    // Set the ship's y position to float on the water
+    this.mesh.position.y = waveHeight;
+    
+    // Apply gentle rocking based on waves
+    const pitchAmount = Math.sin(time * 0.5 + this.mesh.position.x * 0.02) * 0.05;
+    const rollAmount = Math.sin(time * 0.7 + this.mesh.position.z * 0.02) * 0.05;
+    
+    // Apply pitch and roll while preserving yaw (y-axis rotation)
+    const yawRotation = this.mesh.rotation.y;
+    this.mesh.rotation.x = pitchAmount;
+    this.mesh.rotation.z = rollAmount;
+    this.mesh.rotation.y = yawRotation;
+  }
+  
+  calculateWaveHeight(x, z, time) {
+    // Simple wave function
+    const waveHeight = 0.5;
+    const waveFreq = 0.1;
+    const waveSpeed = 0.5;
+    
+    return waveHeight * Math.sin(x * waveFreq + time * waveSpeed) * 
+           Math.cos(z * waveFreq + time * waveSpeed);
   }
   
   takeDamage(damage) {
     this.health = Math.max(0, this.health - damage);
     
-    // Store original color if not already stored
-    if (!this.originalColor) {
-      this.originalColor = this.hull.material.color.clone();
-    }
+    // Show damage notification
+    this.showNotification(`Damage taken: ${damage}`, 'warning');
     
     // Flash red
+    if (this.hull && this.hull.material) {
     this.hull.material.color.setHex(0xff0000);
     
     // Revert back to original color after 200ms
     setTimeout(() => {
       this.hull.material.color.copy(this.originalColor);
     }, 200);
+    }
     
     return this.health <= 0;
   }
@@ -313,93 +226,45 @@ export class Ship {
   fireProjectile(side) {
     const now = Date.now();
     
-    // Handle different weapon types
-    let cannon, isMachineGun = false;
-    let cooldown;
-    
-    if (side === 'left') {
-      cannon = this.leftCannon;
-      cooldown = now - this.lastFired.left < this.weaponSettings.cannon.cooldown;
-    } else if (side === 'right') {
-      cannon = this.rightCannon;
-      cooldown = now - this.lastFired.right < this.weaponSettings.cannon.cooldown;
-    } else if (side === 'left-machine') {
-      cannon = this.machineGuns.left;
-      cooldown = now - this.lastFired.left < this.weaponSettings.machineGun.cooldown;
-      isMachineGun = true;
-    } else if (side === 'right-machine') {
-      cannon = this.machineGuns.right;
-      cooldown = now - this.lastFired.right < this.weaponSettings.machineGun.cooldown;
-      isMachineGun = true;
-    } else if (side === 'front') {
-      cannon = this.machineGuns.front;
-      cooldown = now - this.lastFired.front < this.weaponSettings.machineGun.cooldown;
-      isMachineGun = true;
-    }
-    
-    // Check cooldown
-    if (cooldown) {
+    // Check if the cannon is ready to fire
+    if (side === 'left' && now - this.lastFired.left < this.weaponSettings.cannon.cooldown) {
       return null;
     }
     
+    if (side === 'right' && now - this.lastFired.right < this.weaponSettings.cannon.cooldown) {
+      return null;
+    }
+    
+    if (side === 'front' && now - this.lastFired.front < this.weaponSettings.cannon.cooldown) {
+      return null;
+    }
+    
+    // Update last fired time
+    this.lastFired[side] = now;
+    
     // Get cannon position and direction
-    const cannonWorldPos = new THREE.Vector3();
-    cannon.getWorldPosition(cannonWorldPos);
+    let position, direction;
     
-    // Create direction based on cannon orientation
-    let direction = new THREE.Vector3();
-    
-    if (side === 'left' || side === 'left-machine') {
-      direction.set(-1, 0, 0);
-    } else if (side === 'right' || side === 'right-machine') {
-      direction.set(1, 0, 0);
+    if (side === 'left') {
+      position = this.getLeftCannonPosition();
+      direction = new THREE.Vector3(-1, 0, 0);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+    } else if (side === 'right') {
+      position = this.getRightCannonPosition();
+      direction = new THREE.Vector3(1, 0, 0);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     } else if (side === 'front') {
-      direction.set(0, 0, -1);
+      position = this.getFrontCannonPosition();
+      direction = new THREE.Vector3(0, 0, -1);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     }
     
-    direction.applyQuaternion(this.mesh.quaternion);
-    
-    // Create projectile - smaller for machine guns
-    const projectile = new Projectile(
-      cannonWorldPos, 
-      direction, 
-      isMachineGun ? this.weaponSettings.machineGun.size : this.weaponSettings.cannon.size, // Size
-      isMachineGun ? this.weaponSettings.machineGun.speed : this.weaponSettings.cannon.speed     // Speed
-    );
-    
-    // Add random spread for machine guns
-    if (isMachineGun) {
-      const spread = this.weaponSettings.machineGun.spread;
-      projectile.velocity.x += (Math.random() - 0.5) * spread;
-      projectile.velocity.y += (Math.random() - 0.5) * spread;
-      projectile.velocity.z += (Math.random() - 0.5) * spread;
-    }
-    
-    // Flash effect for machine guns
-    if (isMachineGun && cannon.muzzleFlash) {
-      cannon.muzzleFlash.visible = true;
-      setTimeout(() => {
-        cannon.muzzleFlash.visible = false;
-      }, 50);
-    }
-    
-    // Update cooldown timer
-    if (side === 'left' || side === 'left-machine') {
-      this.lastFired.left = now;
-    } else if (side === 'right' || side === 'right-machine') {
-      this.lastFired.right = now;
-    } else if (side === 'front') {
-      this.lastFired.front = now;
-    }
-    
-    return projectile;
+    // Create and return projectile
+    return this.createProjectile(position, direction, false);
   }
   
-  createProjectile() {
-    // Helper method for multiplayer to create projectile without firing logic
-    const position = new THREE.Vector3();
-    const direction = new THREE.Vector3(1, 0, 0);
-    return new Projectile(position, direction);
+  createProjectile(position, direction, isMachineGun = false) {
+    return new Projectile(position, direction, this.weaponSettings.cannon.speed, this.weaponSettings.cannon.damage, false);
   }
   
   getLeftCannonPosition() {
@@ -416,193 +281,183 @@ export class Ship {
   
   getFrontCannonPosition() {
     const position = new THREE.Vector3();
-    this.machineGuns.front.getWorldPosition(position);
+    this.frontCannon.getWorldPosition(position);
     return position;
   }
   
-  getCharacterPosition() {
-    // Return position for character to stand (near the ship's center)
-    const position = new THREE.Vector3(0, 2.3, -0.5);
-    position.applyMatrix4(this.mesh.matrixWorld);
-    return position;
+  createNotificationElement() {
+    this.notificationContainer = document.createElement('div');
+    this.notificationContainer.id = 'notification-container';
+    this.notificationContainer.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 9999;
+      pointer-events: none;
+      width: 350px;
+    `;
+    document.body.appendChild(this.notificationContainer);
   }
-
-  createShipModel() {
-    const group = new THREE.Group();
-    
-    // Hull - curved outrigger canoe style
-    const hullGeometry = new THREE.CylinderGeometry(1, 1.5, 8, 12);
-    hullGeometry.rotateZ(Math.PI / 2);
-    const hullMaterial = new THREE.MeshPhongMaterial({
-      color: 0x8B4513,  // Saddle brown
-      map: this.woodTexture,
-      bumpMap: this.woodTexture,
-      bumpScale: 0.1
-    });
-    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
-    hull.scale.set(1, 0.6, 1);
-    group.add(hull);
-
-    // Outrigger float
-    const floatGeometry = new THREE.CylinderGeometry(0.3, 0.4, 6, 8);
-    floatGeometry.rotateZ(Math.PI / 2);
-    const float = new THREE.Mesh(floatGeometry, hullMaterial);
-    float.position.set(3, 0, 0);
-    float.scale.set(1, 0.4, 1);
-    group.add(float);
-
-    // Outrigger supports (curved booms)
-    const boomMaterial = new THREE.MeshPhongMaterial({
-      color: 0xA0522D,  // Sienna
-      map: this.woodTexture
-    });
-    
-    const createCurvedBoom = (startPos, endPos) => {
-      const curve = new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(startPos.x, startPos.y, startPos.z),
-        new THREE.Vector3((startPos.x + endPos.x) / 2, 1, (startPos.z + endPos.z) / 2),
-        new THREE.Vector3(endPos.x, endPos.y, endPos.z)
-      );
-      
-      const points = curve.getPoints(10);
-      const boomGeometry = new THREE.TubeGeometry(
-        new THREE.CatmullRomCurve3(points),
-        10,
-        0.1,
-        8,
-        false
-      );
-      
-      return new THREE.Mesh(boomGeometry, boomMaterial);
-    };
-    
-    const frontBoom = createCurvedBoom(
-      new THREE.Vector3(0, 0, 2),
-      new THREE.Vector3(3, 0, 2)
-    );
-    const backBoom = createCurvedBoom(
-      new THREE.Vector3(0, 0, -2),
-      new THREE.Vector3(3, 0, -2)
-    );
-    
-    group.add(frontBoom);
-    group.add(backBoom);
-
-    // Sail (crab claw style)
-    const sailShape = new THREE.Shape();
-    sailShape.moveTo(0, 0);
-    sailShape.quadraticCurveTo(2, 2, 0, 4);    // Front curve
-    sailShape.quadraticCurveTo(3, 2, 0, 0);    // Back curve
-    
-    const sailGeometry = new THREE.ShapeGeometry(sailShape);
-    const sailMaterial = new THREE.MeshPhongMaterial({
-      color: 0xF5DEB3,  // Wheat
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.9,
-      map: this.sailTexture
-    });
-    
-    const sail = new THREE.Mesh(sailGeometry, sailMaterial);
-    sail.position.set(-0.5, 2, 0);
-    sail.rotation.y = Math.PI / 2;
-    group.add(sail);
-
-    // Decorative carvings
-    const addCarving = (position, rotation) => {
-      const carvingGeometry = new THREE.TorusKnotGeometry(0.2, 0.05, 64, 8);
-      const carvingMaterial = new THREE.MeshPhongMaterial({
-        color: 0xDEB887,  // Burlywood
-        map: this.carvingTexture
-      });
-      const carving = new THREE.Mesh(carvingGeometry, carvingMaterial);
-      carving.position.copy(position);
-      carving.rotation.copy(rotation);
-      return carving;
-    };
-    
-    group.add(addCarving(
-      new THREE.Vector3(0, 0.6, 3.5),
-      new THREE.Euler(0, Math.PI / 2, 0)
-    ));
-    
-    group.add(addCarving(
-      new THREE.Vector3(0, 0.6, -3.5),
-      new THREE.Euler(0, Math.PI / 2, 0)
-    ));
-
-    // Add weapon mounts
-    this.leftGunPosition = new THREE.Vector3(-1, 0.5, 2);
-    this.rightGunPosition = new THREE.Vector3(-1, 0.5, -2);
-    this.frontGunPosition = new THREE.Vector3(0, 0.5, 3.5);
-    
-    const gunMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
-    
-    const addGunMount = (position) => {
-      const mount = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 0.4, 8),
-        gunMaterial
-      );
-      mount.position.copy(position);
-      mount.rotation.x = Math.PI / 2;
-      return mount;
-    };
-    
-    group.add(addGunMount(this.leftGunPosition));
-    group.add(addGunMount(this.rightGunPosition));
-    group.add(addGunMount(this.frontGunPosition));
-
-    return group;
-  }
-
+  
   showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `game-notification type-${type}`;
-
-    // Add icon
-    const icon = document.createElement('span');
-    icon.className = 'notification-icon';
+    // Check if we already have an active notification
+    let notification = this.notificationContainer.querySelector('.game-notification');
     
-    switch(type) {
-      case 'join':
-        icon.textContent = '👋';
-        break;
-      case 'death':
-        icon.textContent = '💀';
-        break;
-      case 'hit':
-        icon.textContent = '🎯';
-        break;
-      case 'respawn':
-        icon.textContent = '✨';
-        break;
-      default:
-        icon.textContent = 'ℹ️';
+    if (!notification) {
+      // Create a new notification if one doesn't exist
+      notification = document.createElement('div');
+      notification.className = 'game-notification';
+      notification.style.cssText = `
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 12px;
+        margin-bottom: 8px;
+        font-family: 'Arial', sans-serif;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        backdrop-filter: blur(10px);
+        border-left: 6px solid #9E9E9E;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        max-width: 350px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      `;
+      this.notificationContainer.appendChild(notification);
     }
 
-    // Add message
-    const text = document.createElement('span');
-    text.className = 'notification-text';
-    text.textContent = message;
+    // Update notification style based on type
+    switch(type) {
+      case 'warning':
+        notification.style.borderLeft = '6px solid #FFC107';
+        notification.style.backgroundColor = 'rgba(255, 193, 7, 0.25)';
+        break;
+      case 'danger':
+        notification.style.borderLeft = '6px solid #f44336';
+        notification.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
+        break;
+      case 'success':
+        notification.style.borderLeft = '6px solid #4CAF50';
+        notification.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
+        break;
+      default:
+        notification.style.borderLeft = '6px solid #9E9E9E';
+        notification.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+    }
 
-    // Assemble notification
-    notification.appendChild(icon);
-    notification.appendChild(text);
-    this.notificationContainer.appendChild(notification);
-    this.notifications.push(notification);
+    // Set the notification text
+    notification.textContent = message;
 
-    // Remove after delay
-    setTimeout(() => {
-      notification.classList.add('removing');
-      setTimeout(() => {
-        if (notification.parentNode === this.notificationContainer) {
-          this.notificationContainer.removeChild(notification);
-        }
-        const index = this.notifications.indexOf(notification);
-        if (index > -1) {
-          this.notifications.splice(index, 1);
-        }
-      }, 300);
-    }, type === 'join' || type === 'death' ? 5000 : 3000);
+    // Make sure notification is visible
+    notification.style.opacity = '1';
+    
+    // Clear any existing timeout
+    if (this.notificationTimeout) {
+      clearTimeout(this.notificationTimeout);
+    }
+
+    // Set timeout to hide notification
+    this.notificationTimeout = setTimeout(() => {
+      notification.style.opacity = '0.3';
+    }, 3000);
+  }
+
+  // Add collision detection
+  handleCollision(obstacle) {
+    // Slow down or stop the ship based on collision type
+    if (obstacle.type === 'island') {
+      // Hard collision with island - stop and push back
+      this.speed = -this.speed * 0.5; // Bounce back at half speed
+      
+      // Apply a small push back from the obstacle
+      const pushDirection = new THREE.Vector3()
+        .subVectors(this.mesh.position, obstacle.position)
+        .normalize();
+        
+      this.mesh.position.add(pushDirection.multiplyScalar(2)); // Push back by 2 units
+      
+      return true;
+    } else if (obstacle.type === 'rock' || obstacle.type === 'buoy') {
+      // Softer collision - reduce speed
+      this.speed = this.speed * 0.7;
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Check if ship can dock at an island
+  canDockAt(island) {
+    if (!island || !island.dockPosition) return false;
+    
+    // Check if near enough to the island's dock
+    const distanceToDock = this.mesh.position.distanceTo(island.dockPosition);
+    
+    // Check if facing roughly toward the dock
+    const dockDirection = new THREE.Vector3()
+      .subVectors(island.dockPosition, this.mesh.position)
+      .normalize();
+      
+    const shipDirection = new THREE.Vector3(0, 0, 1)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      
+    const dotProduct = dockDirection.dot(shipDirection);
+    const isAligned = dotProduct > 0.7; // Roughly within 45 degrees
+    
+    return distanceToDock < 20 && isAligned;
+  }
+
+  // Dock the ship at an island
+  dockAt(island) {
+    if (!this.canDockAt(island)) return false;
+    
+    // Move ship to docking position and align with dock
+    const dockingPosition = island.dockPosition.clone();
+    dockingPosition.y = this.mesh.position.y; // Maintain current height
+    
+    // Store original position and rotation for undocking
+    this.originalPosition = this.mesh.position.clone();
+    this.originalRotation = this.mesh.rotation.clone();
+    
+    // Align with dock
+    this.mesh.position.copy(dockingPosition);
+    
+    // Stop the ship
+    this.speed = 0;
+    this.isDocked = true;
+    this.dockedAt = island;
+    
+    return true;
+  }
+
+  // Undock the ship
+  undock() {
+    if (!this.isDocked) return false;
+    
+    this.isDocked = false;
+    this.dockedAt = null;
+    
+    // Return to original position if needed
+    if (this.originalPosition) {
+      // Just move slightly away from dock
+      const moveDirection = new THREE.Vector3(0, 0, -5)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      this.mesh.position.add(moveDirection);
+    }
+    
+    return true;
+  }
+
+  // Check if the ship is near an island
+  isNearIsland(island, maxDistance = 20) {
+    if (!island) return false;
+    
+    const distance = this.mesh.position.distanceTo(island.position);
+    return distance < (island.radius + maxDistance);
+  }
+
+  // Check if ship can allow explorer to disembark
+  canDisembark(island) {
+    return this.isNearIsland(island) || this.isDocked;
   }
 } 

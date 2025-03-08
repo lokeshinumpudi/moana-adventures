@@ -11,7 +11,7 @@ const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
       ? "https://moana-city.vercel.app"  // Update this with your Vercel domain
-      : ["http://localhost:5500", "http://127.0.0.1:5500"],
+      : ["http://localhost:5173", "http://127.0.0.1:5500","*"],
     methods: ["GET", "POST"]
   }
 });
@@ -25,6 +25,246 @@ const projectiles = new Map();
 // Physics constants
 const GRAVITY = 9.8;
 const MAX_PROJECTILE_LIFETIME = 10000; // 10 seconds
+
+// World configuration
+const WORLD_CONFIG = {
+  worldSize: 800, // Size of the world (square)
+  islands: {
+    count: 5,     // Number of islands to generate
+    minDistance: 150, // Minimum distance between islands
+    minRadius: 40,    // Minimum island radius
+    maxRadius: 70,    // Maximum island radius
+    minHeight: 15,    // Minimum island height
+    maxHeight: 25     // Maximum island height
+  },
+  collectibles: {
+    perIsland: { min: 5, max: 10 }, // Number of collectibles per island
+    types: ['treasure', 'gem', 'fruit', 'wood'] // Types of collectibles
+  },
+  obstacles: {
+    count: 20, // Number of obstacles
+    types: ['rock', 'log', 'buoy'] // Types of obstacles
+  }
+};
+
+// World storage
+const worldData = {
+  islands: [],
+  collectibles: [],
+  obstacles: [],
+  buoys: []
+};
+
+// Generate a random position within the world bounds
+function generateRandomPosition() {
+  const halfSize = WORLD_CONFIG.worldSize / 2;
+  return {
+    x: Math.random() * WORLD_CONFIG.worldSize - halfSize,
+    y: 0, // Always at water level
+    z: Math.random() * WORLD_CONFIG.worldSize - halfSize
+  };
+}
+
+// Check if a position is far enough from existing objects
+function isPositionValid(position, existingObjects, minDistance) {
+  for (const obj of existingObjects) {
+    const dx = position.x - obj.position.x;
+    const dz = position.z - obj.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    if (distance < minDistance) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Generate islands
+function generateIslands() {
+  const { count, minDistance, minRadius, maxRadius, minHeight, maxHeight } = WORLD_CONFIG.islands;
+  
+  for (let i = 0; i < count; i++) {
+    let position;
+    let isValid = false;
+    let attempts = 0;
+    
+    // Try to find a valid position
+    while (!isValid && attempts < 20) {
+      position = generateRandomPosition();
+      isValid = isPositionValid(position, worldData.islands, minDistance);
+      attempts++;
+    }
+    
+    // Create island
+    const island = {
+      id: `island_${i}`,
+      position: position,
+      radius: minRadius + Math.random() * (maxRadius - minRadius),
+      height: minHeight + Math.random() * (maxHeight - minHeight),
+      hasDock: Math.random() > 0.2, // 80% chance of having a dock
+      dockAngle: Math.random() * Math.PI * 2, // Random angle for dock
+      vegetation: true
+    };
+    
+    // Calculate dock position based on radius and angle
+    if (island.hasDock) {
+      const dockDirection = {
+        x: Math.sin(island.dockAngle),
+        z: Math.cos(island.dockAngle)
+      };
+      
+      island.dockPosition = {
+        x: position.x + dockDirection.x * (island.radius + 20),
+        y: 0,
+        z: position.z + dockDirection.z * (island.radius + 20)
+      };
+      
+      island.dockDirection = dockDirection;
+    }
+    
+    worldData.islands.push(island);
+  }
+  
+  console.log(`Generated ${worldData.islands.length} islands`);
+}
+
+// Generate collectibles on islands
+function generateCollectibles() {
+  const { perIsland, types } = WORLD_CONFIG.collectibles;
+  
+  worldData.islands.forEach((island, islandIndex) => {
+    // Random number of collectibles for this island
+    const count = perIsland.min + Math.floor(Math.random() * (perIsland.max - perIsland.min + 1));
+    
+    for (let i = 0; i < count; i++) {
+      // Random position on island
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * (island.radius * 0.8); // Within 80% of radius
+      
+      const position = {
+        x: island.position.x + Math.sin(angle) * distance,
+        z: island.position.z + Math.cos(angle) * distance
+      };
+      
+      // Calculate height based on island (simplified cone formula)
+      const dx = position.x - island.position.x;
+      const dz = position.z - island.position.z;
+      const distanceFromCenter = Math.sqrt(dx * dx + dz * dz);
+      const height = Math.max(0, island.height * (1 - distanceFromCenter / island.radius));
+      
+      position.y = height + 0.5; // Slightly above the island surface
+      
+      // Create collectible
+      const type = types[Math.floor(Math.random() * types.length)];
+      const value = Math.floor(Math.random() * 50) + 10; // 10-60 value
+      
+      const collectible = {
+        id: `collectible_${islandIndex}_${i}`,
+        type: type,
+        value: value,
+        position: position,
+        islandId: island.id
+      };
+      
+      worldData.collectibles.push(collectible);
+    }
+  });
+  
+  console.log(`Generated ${worldData.collectibles.length} collectibles`);
+}
+
+// Generate obstacles
+function generateObstacles() {
+  const { count, types } = WORLD_CONFIG.obstacles;
+  
+  for (let i = 0; i < count; i++) {
+    let position;
+    let isValid = false;
+    let attempts = 0;
+    
+    // Try to find a valid position
+    while (!isValid && attempts < 10) {
+      position = generateRandomPosition();
+      
+      // Make sure it's not too close to islands
+      isValid = isPositionValid(position, worldData.islands, 80);
+      
+      // Also check other obstacles
+      if (isValid) {
+        isValid = isPositionValid(position, worldData.obstacles, 30);
+      }
+      
+      attempts++;
+    }
+    
+    if (!isValid) continue; // Skip if we can't find a valid position
+    
+    // Create obstacle
+    const type = types[Math.floor(Math.random() * types.length)];
+    
+    const obstacle = {
+      id: `obstacle_${i}`,
+      type: type,
+      position: position,
+      rotation: Math.random() * Math.PI * 2, // Random rotation
+      scale: 0.8 + Math.random() * 0.4 // Random scale 0.8-1.2
+    };
+    
+    worldData.obstacles.push(obstacle);
+  }
+  
+  console.log(`Generated ${worldData.obstacles.length} obstacles`);
+}
+
+// Generate buoys (race track markers)
+function generateBuoys() {
+  // Create a race track with buoys
+  const trackRadius = 300; // Radius of the track
+  const buoyCount = 20;    // Number of buoys
+  
+  for (let i = 0; i < buoyCount; i++) {
+    const angle = (i / buoyCount) * Math.PI * 2;
+    
+    // Add some variation to the track
+    const radiusVariation = Math.sin(angle * 3) * 50;
+    const currentRadius = trackRadius + radiusVariation;
+    
+    const position = {
+      x: Math.sin(angle) * currentRadius,
+      y: 0,
+      z: Math.cos(angle) * currentRadius
+    };
+    
+    const buoy = {
+      id: `buoy_${i}`,
+      position: position,
+      order: i
+    };
+    
+    worldData.buoys.push(buoy);
+  }
+  
+  console.log(`Generated ${worldData.buoys.length} buoys`);
+}
+
+// Initialize world
+function initializeWorld() {
+  // Clear any existing data
+  worldData.islands = [];
+  worldData.collectibles = [];
+  worldData.obstacles = [];
+  worldData.buoys = [];
+  
+  // Generate all world elements
+  generateIslands();
+  generateCollectibles();
+  generateObstacles();
+  generateBuoys();
+  
+  console.log("World generation complete!");
+}
+
+// Generate the world at server startup
+initializeWorld();
 
 // Debug route to check server status
 app.get('/status', (req, res) => {
@@ -131,6 +371,11 @@ io.on('connection', (socket) => {
   };
   // console.log('Client info:', clientInfo);
 
+  // Handle ping requests
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+
   // Handle player join
   socket.on('player:join', (playerData) => {
     console.log(`[${new Date().toISOString()}] Player joined:`, socket.id);
@@ -163,13 +408,16 @@ io.on('connection', (socket) => {
   socket.on('player:state', (gameState) => {
     try {
       if (players.has(socket.id)) {
+        // Get the current player state
+        const currentPlayer = players.get(socket.id);
+        
         // Store the updated player state
         players.set(socket.id, {
-          ...players.get(socket.id),
+          ...currentPlayer,
           ...gameState
         });
         
-        // Process any new projectiles
+        // Process all projectiles (new and existing)
         if (gameState.projectiles && gameState.projectiles.length > 0) {
           // Get existing projectile IDs for this player
           const existingIds = new Set(
@@ -178,11 +426,23 @@ io.on('connection', (socket) => {
               .map(([id, _]) => id)
           );
           
-          // Find new projectiles
+          // Process all projectiles
           gameState.projectiles.forEach(projectileData => {
-            // Only add if we don't already have this projectile
-            if (!existingIds.has(projectileData.id)) {
-              // Add to projectiles map
+            if (existingIds.has(projectileData.id)) {
+              // Update existing projectile
+              const existingProjectile = projectiles.get(projectileData.id);
+              existingProjectile.position = projectileData.position;
+              existingProjectile.velocity = projectileData.velocity;
+              
+              // Broadcast the updated projectile to all other players
+              socket.broadcast.emit('projectile:updated', {
+                id: projectileData.id,
+                playerId: socket.id,
+                position: projectileData.position,
+                velocity: projectileData.velocity
+              });
+            } else {
+              // Add new projectile
               projectiles.set(projectileData.id, {
                 id: projectileData.id,
                 ownerId: socket.id,
@@ -202,13 +462,31 @@ io.on('connection', (socket) => {
               });
             }
           });
+          
+          // Remove projectiles that are no longer in the client's state
+          const currentIds = new Set(gameState.projectiles.map(p => p.id));
+          for (const id of existingIds) {
+            if (!currentIds.has(id)) {
+              projectiles.delete(id);
+              
+              // Broadcast removal to all players
+              io.emit('projectile:removed', {
+                id: id,
+                playerId: socket.id,
+                reason: 'expired'
+              });
+            }
+          }
         }
         
-        // Stripped-down game state to broadcast
-        // We don't need to send projectile data now since we're handling it separately
+        // Broadcast the complete player state to all other players
+        // Include all necessary information for proper synchronization
         const broadcastState = {
           id: socket.id,
-          ship: gameState.ship
+          ship: gameState.ship,
+          score: gameState.score,
+          kills: gameState.kills,
+          timestamp: Date.now() // Add timestamp for latency compensation
         };
         
         // Broadcast player state to all other players
@@ -272,13 +550,35 @@ io.on('connection', (socket) => {
   socket.on('error', (error) => {
     console.error('Socket error:', error);
   });
+
+  // Send world data to the client
+  socket.emit('world:data', worldData);
+  
+  // Handle collectible pickup
+  socket.on('collectible:pickup', (data) => {
+    // Find the collectible in our world data
+    const collectibleIndex = worldData.collectibles.findIndex(c => c.id === data.collectibleId);
+    
+    if (collectibleIndex !== -1) {
+      // Remove the collectible from our world data
+      const collectible = worldData.collectibles.splice(collectibleIndex, 1)[0];
+      
+      // Broadcast to all clients that this collectible is gone
+      io.emit('collectible:removed', {
+        id: collectible.id,
+        playerId: data.playerId
+      });
+      
+      // Optionally add to player's score/inventory
+      // ...
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
   console.log('Server configuration:', {
-    environment: process.env.NODE_ENV || 'development',
-    cors: io._corsOrigin
+    environment: process.env.NODE_ENV || 'development'
   });
 });
