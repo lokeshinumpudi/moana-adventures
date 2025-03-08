@@ -11,6 +11,7 @@ export class Ship {
     this.rotationSpeed = 2;
     this.collisionRadius = 3.5;
     this.velocity = new THREE.Vector3();
+    this.angularVelocity = new THREE.Vector3();
     this.direction = new THREE.Vector3(0, 0, 1);
     this.inputManager = inputManager;
     this.isDocked = false;
@@ -129,17 +130,19 @@ export class Ship {
   }
   
   update(delta, inputManager = null) {
+    // Store previous rotation for angular velocity calculation
+    const prevRotation = this.mesh.rotation.clone();
+    
     // If we have an input manager, update based on input
     if (inputManager) {
       // If explorer is active, don't process ship controls
       if (this.game && this.game.explorer && this.game.explorer.isActive) {
         // Don't process controls when explorer is active
-        // Apply deceleration to slow down gradually
-        if (Math.abs(this.speed) > 0.1) {
-          this.speed *= 0.95; // Slow down gradually
-        } else {
-          this.speed = 0; // Stop completely when slow enough
-        }
+        // When exploring, completely disable ship movement
+        this.speed = 0;
+        this.angularVelocity.set(0, 0, 0);
+        // No further ship updates needed while exploring
+        return;
       } else {
         // Normal ship control processing
         // Handle forward/backward movement
@@ -153,15 +156,15 @@ export class Ship {
             this.speed *= 0.98;
           } else {
             this.speed = 0;
-      }
-    }
-    
-    // Handle rotation
+          }
+        }
+        
+        // Handle rotation
         if (inputManager.keys['a'] || inputManager.keys['ArrowLeft']) {
-      this.mesh.rotation.y += this.rotationSpeed * delta;
-    }
+          this.mesh.rotation.y += this.rotationSpeed * delta;
+        }
         if (inputManager.keys['d'] || inputManager.keys['ArrowRight']) {
-      this.mesh.rotation.y -= this.rotationSpeed * delta;
+          this.mesh.rotation.y -= this.rotationSpeed * delta;
         }
       }
     }
@@ -192,6 +195,11 @@ export class Ship {
     this.mesh.rotation.x = pitchAmount;
     this.mesh.rotation.z = rollAmount;
     this.mesh.rotation.y = yawRotation;
+    
+    // Calculate angular velocity (rotation change per second)
+    this.angularVelocity.x = (this.mesh.rotation.x - prevRotation.x) / delta;
+    this.angularVelocity.y = (this.mesh.rotation.y - prevRotation.y) / delta;
+    this.angularVelocity.z = (this.mesh.rotation.z - prevRotation.z) / delta;
   }
   
   calculateWaveHeight(x, z, time) {
@@ -437,13 +445,8 @@ export class Ship {
     this.isDocked = false;
     this.dockedAt = null;
     
-    // Return to original position if needed
-    if (this.originalPosition) {
-      // Just move slightly away from dock
-      const moveDirection = new THREE.Vector3(0, 0, -5)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
-      this.mesh.position.add(moveDirection);
-    }
+    // When returning from exploration, just keep the ship in place
+    // This prevents the ship from moving when the player returns from island exploration
     
     return true;
   }

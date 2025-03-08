@@ -208,6 +208,9 @@ export class Game {
           this.lastTime = Date.now();
           this.animate();
           
+          // Set up event listeners
+          this.setupEventListeners();
+          
           resolve();
         });
       } catch (error) {
@@ -314,38 +317,48 @@ export class Game {
           });
         }),
         
-          // Create explorer for island exploration
+        // Create explorer for island exploration
         new Promise(resolve => {
             this.explorer = new Explorer(this);
             this.scene.add(this.explorer.mesh);
-          resolve();
+            resolve();
         }),
         
-          // Create world - either from server data or placeholder
-          new Promise((resolve, reject) => {
-            try {
-              if (this.worldData) {
-                // Server has already provided world data, create from that
-                this.createWorldFromData();
-              } else {
-                // Otherwise create placeholders until server data arrives
-                this.createPlaceholderWorld();
-              }
-          resolve();
-            } catch (error) {
-              reject(error);
+        // Create world - either from server data or placeholder
+        new Promise((resolve, reject) => {
+          try {
+            if (this.worldData) {
+              // Server has already provided world data, create from that
+              this.createWorldFromData();
+            } else {
+              // Otherwise create placeholders until server data arrives
+              this.createPlaceholderWorld();
             }
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
         })
       ]).then(() => {
+        // Set player ship reference
+        this.playerShip = this.ship;
+        
+        // Create explorer UI
+        this.createExplorerUI();
+        
+        // Initialize ship controls as enabled
+        this.shipControlsDisabled = false;
+        
         // All components loaded
         this.isRunning = true;
+        
         resolve();
-        }).catch(error => {
-          console.error("Error creating components:", error);
-          reject(error);
-        });
+      }).catch(error => {
+        console.error('Error creating components:', error);
+        reject(error);
+      });
       } catch (error) {
-        console.error("Error in createComponents:", error);
+        console.error('Error in createComponents:', error);
         reject(error);
       }
     });
@@ -434,13 +447,27 @@ export class Game {
           islandData.position.z
         );
         
-        // Create island using data from server
+        // For now, force cone type for reliability
+        const islandType = 'cone';
+        
+        // Create island using enhanced data from server
         const island = new Island({
           position: position,
           radius: islandData.radius,
           height: islandData.height,
-          vegetation: islandData.vegetation,
-          dock: islandData.hasDock
+          type: islandType, // Force cone type for now
+          baseHeight: islandData.baseHeight || 1.0,
+          terrainFactor: islandData.terrainFactor || 1.2,
+          beachWidth: islandData.beachWidth || 8,
+          treeDensity: islandData.treeDensity || 1.0,
+          maxTreeHeight: islandData.maxTreeHeight || 4.5,
+          colorVariation: islandData.colorVariation || 0,
+          vegetation: islandData.vegetation !== false,
+          hasDock: islandData.hasDock !== false,
+          dockAngle: islandData.dockAngle || 0,
+          dockDirection: islandData.dockDirection || { x: 0, z: 1 },
+          dockLength: islandData.dockLength || 15,
+          dockWidth: islandData.dockWidth || 5
         });
         
         // Store the server ID for reference
@@ -603,17 +630,63 @@ export class Game {
   createPlaceholderWorld() {
     console.log('Creating placeholder world while waiting for server data');
     
-    // Create a single island in the middle
-    const island = new Island({
+    // Create islands with different types for variety
+    const islandTypes = ['cone', 'dome', 'plateau'];
+    
+    // Create a main island in the middle
+    const mainIsland = new Island({
       position: new THREE.Vector3(0, 0, 0),
       radius: 50,
       height: 20,
+      type: 'cone', // Use cone type for now as it's most reliable
+      baseHeight: 1.0,
+      terrainFactor: 1.2,
+      beachWidth: 10,
+      treeDensity: 1.2,
+      maxTreeHeight: 5,
       vegetation: true,
-      dock: true
+      hasDock: true,
+      dockLength: 18,
+      dockWidth: 6
     });
     
-    this.scene.add(island.mesh);
-    this.islands = [island];
+    this.scene.add(mainIsland.mesh);
+    
+    // Create a few smaller islands around
+    const smallIslands = [];
+    const islandCount = 2; // Reduced count for testing
+    
+    for (let i = 0; i < islandCount; i++) {
+      const angle = (i / islandCount) * Math.PI * 2;
+      const distance = 150 + Math.random() * 50;
+      
+      const position = new THREE.Vector3(
+        Math.sin(angle) * distance,
+        0,
+        Math.cos(angle) * distance
+      );
+      
+      // Use only cone type for now until we fix the other types
+      const island = new Island({
+        position: position,
+        radius: 30 + Math.random() * 20,
+        height: 15 + Math.random() * 10,
+        type: 'cone', // Use cone type for reliability
+        baseHeight: 1.0,
+        terrainFactor: 1.2 + Math.random() * 0.3,
+        beachWidth: 5 + Math.random() * 5,
+        treeDensity: 0.8 + Math.random() * 0.4,
+        maxTreeHeight: 3.5 + Math.random() * 1.5,
+        vegetation: true,
+        hasDock: Math.random() > 0.3,
+        colorVariation: 0.1
+      });
+      
+      this.scene.add(island.mesh);
+      smallIslands.push(island);
+    }
+    
+    this.islands = [mainIsland, ...smallIslands];
   }
   
   // Add compatibility method for older code that might still call this
@@ -665,6 +738,9 @@ export class Game {
   }
   
   fireProjectile(side) {
+    // Don't fire if ship controls are disabled (explorer mode)
+    if (this.shipControlsDisabled) return;
+    
     // Check cooldown
     const now = Date.now();
     if (now - this.lastCannonFireTime < this.cannonCooldown) {
@@ -726,6 +802,9 @@ export class Game {
   }
   
   fireMachineGun(side) {
+    // Don't fire if ship controls are disabled (explorer mode)
+    if (this.shipControlsDisabled) return;
+    
     // Check cooldown
     const now = Date.now();
     if (now - this.lastMachineGunFireTime < this.machineGunCooldown) {
@@ -1091,12 +1170,32 @@ export class Game {
                 setTimeout(() => this.shownDisembarkHint = false, 5000);
               }
               
-              // Disembark to island
-              this.explorer.spawn(
-                this.ship.mesh.position.clone(),
-                this.ship.mesh.rotation.clone(),
-                island
-              );
+              try {
+                // Dock the ship if not already docked
+                if (!this.ship.isDocked) {
+                  this.ship.dockAt(island);
+                }
+                
+                // Disembark to island
+                this.explorer.spawn(
+                  this.ship.mesh.position.clone(),
+                  this.ship.mesh.rotation.clone(),
+                  island
+                );
+                
+                // Switch camera to follow explorer
+                if (this.cameraManager) {
+                  console.log('Switching camera to follow explorer');
+                  this.cameraManager.target = this.explorer;
+                  
+                  // Force camera update immediately to prevent jarring transition
+                  this.cameraManager.update();
+                }
+              } catch (error) {
+                console.error('Error spawning explorer:', error);
+                this.showNotification("Couldn't disembark. Try again.", 'warning');
+              }
+              
               break;
             }
           }
@@ -1116,7 +1215,23 @@ export class Game {
     
     // Update explorer if active
     if (this.explorer && this.explorer.isActive) {
-      this.explorer.update(delta, this.inputManager);
+      try {
+        this.explorer.update(delta, this.inputManager);
+        
+        // Ensure camera is following explorer
+        if (this.cameraManager && this.cameraManager.target !== this.explorer) {
+          console.log('Correcting camera target to explorer');
+          this.cameraManager.setTarget(this.explorer);
+        }
+      } catch (error) {
+        console.error('Error updating explorer:', error);
+        // Don't deactivate explorer on error - let the player continue exploring
+      }
+    }
+    
+    // Update camera
+    if (this.cameraManager) {
+      this.cameraManager.update(delta);
     }
     
     // Update collectibles
@@ -1172,12 +1287,17 @@ export class Game {
       this.lastCollisionCheckTime = now;
     }
     
-    // Update camera
-    this.updateCamera(delta);
-    
-    // Update multiplayer - this now only handles sending state and updating other players
+    // Update multiplayer state more frequently
     if (this.socketManager) {
-      this.socketManager.update(delta);
+      try {
+        // Ensure all required objects exist before sending state
+        if ((this.playerShip && this.playerShip.mesh) || 
+            (this.explorer && this.explorer.isActive && this.explorer.mesh)) {
+          this.socketManager.sendPlayerState();
+        }
+      } catch (error) {
+        console.error('Error updating multiplayer state:', error);
+      }
     }
     
     // Update HUD
@@ -1195,6 +1315,23 @@ export class Game {
           frontCannon: Date.now() - this.ship.lastFired.front
         } : null
       });
+    }
+    
+    // Handle input for explorer spawning/returning
+    if (this.inputManager.isKeyPressed('e') || this.inputManager.isKeyPressed('KeyE')) {
+      if (this.explorer && this.explorer.isActive) {
+        // Check if explorer is near dock to return to ship
+        if (this.explorer.currentIsland && 
+            this.explorer.currentIsland.isNearDock(this.explorer.mesh.position)) {
+          this.handleExplorerReturn();
+        }
+      } else if (this.playerShip) {
+        // Try to spawn explorer at nearest island
+        const closestIsland = this.findClosestIslandWithDock(this.playerShip.mesh.position);
+        if (closestIsland) {
+          this.handleExplorerSpawn();
+        }
+      }
     }
   }
   
@@ -1467,7 +1604,7 @@ export class Game {
       if (distance < obstacleRadius) {
         // Create explosion effect
         if (this.particleSystem) {
-          this.particleSystem.createExplosion(projectile.mesh.position.clone(), 0.5);
+          this.particleSystem.createExplosion(projectile.mesh.position.clone(), 1.0);
         }
         
         // Remove projectile
@@ -2136,15 +2273,61 @@ export class Game {
 
   // Add method for returning to ship
   returnToShip() {
-    if (this.explorer && this.explorer.isActive) {
-      const shipInfo = this.explorer.returnToShip();
-      if (shipInfo) {
-        // Update camera to focus on ship again
-        if (this.cameraManager) {
-          this.cameraManager.target = this.ship.mesh;
-        }
-      }
+    if (!this.explorer || !this.explorer.isActive) {
+      return false;
     }
+    
+    if (!this.playerShip) {
+      console.error('Cannot return to ship: No player ship found');
+      return false;
+    }
+    
+    // Check if explorer is near dock
+    if (!this.explorer.currentIsland || !this.explorer.currentIsland.isNearDock(this.explorer.mesh.position, 15)) {
+      this.showNotification('You need to be near the dock to return to your ship', 'warning');
+      return false;
+    }
+    
+    // Deactivate explorer
+    this.explorer.isActive = false;
+    
+    // Hide explorer mesh
+    this.explorer.mesh.visible = false;
+    
+    // Reset position to be at the ship
+    this.explorer.mesh.position.copy(this.playerShip.mesh.position);
+    
+    // Update camera to focus on ship again
+    if (this.cameraManager) {
+      console.log('Switching camera back to ship');
+      this.cameraManager.setTarget(this.playerShip);
+    }
+    
+    // Undock the ship if it was docked
+    if (this.playerShip.isDocked) {
+      this.playerShip.undock();
+    }
+    
+    // Hide explorer controls
+    this.hideExplorerControls();
+    
+    // Enable ship controls
+    this.enableShipControls();
+    
+    // Show notification
+    this.showNotification('Returned to ship!', 'success');
+    
+    // Send explorer state to server
+    if (this.socketManager) {
+      this.socketManager.sendExplorerState({
+        position: this.explorer.mesh.position,
+        rotation: { y: this.explorer.mesh.rotation.y },
+        isActive: false,
+        islandId: null
+      });
+    }
+    
+    return true;
   }
 
   handleOtherPlayerExplorer(data) {
@@ -2211,5 +2394,197 @@ export class Game {
     
     // Create world components from server data
     this.createWorldFromData();
+  }
+
+  // Handle explorer spawning at island
+  handleExplorerSpawn() {
+    if (!this.playerShip || !this.explorer) {
+      console.error('Cannot spawn explorer: No player ship or explorer found');
+      return false;
+    }
+    
+    // Find the closest island with a dock
+    const closestIsland = this.findClosestIslandWithDock(this.playerShip.mesh.position);
+    
+    if (!closestIsland) {
+      this.showNotification('No suitable island found nearby', 'warning');
+      return false;
+    }
+    
+    // Try to spawn explorer at the island
+    const success = this.explorer.spawn(
+      this.playerShip.mesh.position.clone(),
+      this.playerShip.mesh.rotation.clone(),
+      closestIsland
+    );
+    
+    if (success) {
+      // Switch camera to follow explorer with smooth transition
+      if (this.cameraManager) {
+        this.cameraManager.setTarget(this.explorer);
+      }
+      
+      // Show controls UI
+      this.showExplorerControls();
+    }
+    
+    return success;
+  }
+  
+  // Handle explorer returning to ship
+  handleExplorerReturn() {
+    return this.returnToShip();
+  }
+  
+  // Find the closest island with a dock
+  findClosestIslandWithDock(position) {
+    if (!this.islands || this.islands.length === 0) {
+      return null;
+    }
+    
+    let closestIsland = null;
+    let closestDistance = Infinity;
+    
+    for (const island of this.islands) {
+      // Skip islands without docks
+      if (!island.dock) continue;
+      
+      // Check if ship is near the dock
+      if (island.isNearDock(position)) {
+        const distance = position.distanceTo(island.position);
+        
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIsland = island;
+        }
+      }
+    }
+    
+    return closestIsland;
+  }
+  
+  // Show explorer controls UI
+  showExplorerControls() {
+    const controls = document.getElementById('explorer-controls');
+    if (controls) {
+      controls.classList.remove('hidden');
+    }
+    
+    // Disable ship firing
+    this.disableShipControls();
+  }
+  
+  // Hide explorer controls UI
+  hideExplorerControls() {
+    const controls = document.getElementById('explorer-controls');
+    if (controls) {
+      controls.classList.add('hidden');
+    }
+    
+    // Re-enable ship firing
+    this.enableShipControls();
+  }
+  
+  // Handle collectible pickup
+  handleCollectiblePickup(collectible) {
+    if (!collectible) return;
+    
+    // Add to explorer's inventory
+    if (this.explorer && this.explorer.inventory) {
+      this.explorer.inventory.push({
+        type: collectible.type,
+        value: collectible.value
+      });
+    }
+    
+    // Remove collectible from scene
+    this.scene.remove(collectible.mesh);
+    
+    // Remove from collectibles array
+    const index = this.collectibles.indexOf(collectible);
+    if (index !== -1) {
+      this.collectibles.splice(index, 1);
+    }
+    
+    // Notify server if multiplayer
+    if (this.socketManager) {
+      this.socketManager.sendCollectiblePickup({
+        collectibleId: collectible.id,
+        islandId: collectible.islandId
+      });
+    }
+  }
+
+  // Add this method to create the explorer UI
+  createExplorerUI() {
+    // Create explorer controls container
+    const explorerControls = document.createElement('div');
+    explorerControls.id = 'explorer-controls';
+    explorerControls.className = 'explorer-controls hidden';
+    explorerControls.style.position = 'absolute';
+    explorerControls.style.bottom = '20px';
+    explorerControls.style.left = '50%';
+    explorerControls.style.transform = 'translateX(-50%)';
+    explorerControls.style.display = 'flex';
+    explorerControls.style.flexDirection = 'column';
+    explorerControls.style.alignItems = 'center';
+    explorerControls.style.gap = '10px';
+    
+    // Create return to ship button
+    const returnButton = document.createElement('button');
+    returnButton.id = 'return-to-ship-button';
+    returnButton.textContent = 'Return to Ship';
+    returnButton.className = 'game-button';
+    returnButton.style.padding = '10px 20px';
+    returnButton.style.backgroundColor = '#2196F3';
+    returnButton.style.color = 'white';
+    returnButton.style.border = 'none';
+    returnButton.style.borderRadius = '5px';
+    returnButton.style.cursor = 'pointer';
+    returnButton.style.fontWeight = 'bold';
+    returnButton.style.fontSize = '16px';
+    returnButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+    
+    // Add hover effect
+    returnButton.addEventListener('mouseover', () => {
+      returnButton.style.backgroundColor = '#0b7dda';
+    });
+    
+    returnButton.addEventListener('mouseout', () => {
+      returnButton.style.backgroundColor = '#2196F3';
+    });
+    
+    // Add click event
+    returnButton.addEventListener('click', () => {
+      this.handleExplorerReturn();
+    });
+    
+    // Add button to controls
+    explorerControls.appendChild(returnButton);
+    
+    // Add controls to container
+    this.container.appendChild(explorerControls);
+  }
+
+  // Add methods to disable/enable ship controls
+  disableShipControls() {
+    this.shipControlsDisabled = true;
+  }
+
+  enableShipControls() {
+    this.shipControlsDisabled = false;
+  }
+
+  setupEventListeners() {
+    // Add event listener for return to ship button
+    const returnToShipBtn = document.getElementById('return-to-ship-btn');
+    if (returnToShipBtn) {
+      returnToShipBtn.addEventListener('click', () => {
+        this.handleExplorerReturn();
+      });
+    }
+    
+    // Add event listener for window resize
+    window.addEventListener('resize', this.onWindowResize.bind(this));
   }
 } 

@@ -64,7 +64,7 @@ export class SocketManager {
     this.socket.on('connect', () => {
       console.log('Connected to server');
       // Send initial state immediately on connect
-      if (this.game.ship) {
+      if (this.game.playerShip) {
         this.socket.emit('player:join', {
           id: this.socket.id,
           name: `Player ${this.socket.id.substring(0, 4)}`,
@@ -94,23 +94,8 @@ export class SocketManager {
     this.socket.on('players:list', (players) => {
       console.log('Received players list:', players);
       
-      // Remove players that aren't in the new list
-      for (const [id, player] of this.otherPlayers) {
-        if (!players.find(p => p.id === id)) {
-          this.removePlayer(id);
-        }
-      }
-      
-      // Add or update players from the list
-      players.forEach(playerData => {
-        if (playerData.id !== this.socket.id) {
-          if (!this.otherPlayers.has(playerData.id)) {
-            this.addOtherPlayer(playerData);
-          } else {
-            this.updateOtherPlayer(playerData);
-          }
-        }
-      });
+      // Process players in batches to avoid UI freezing
+      this.processBatchedPlayers(players);
     });
     
     // Handle new player joins
@@ -135,7 +120,6 @@ export class SocketManager {
     
     // Handle player updates from server
     this.socket.on('player:updated', (playerData) => {
-      console.log('Received player update from server:', playerData);
       if (playerData.id !== this.socket.id) {
         const existingPlayer = this.otherPlayers.get(playerData.id);
         if (existingPlayer) {
@@ -152,72 +136,68 @@ export class SocketManager {
       this.removePlayer(playerId);
     });
     
-    // Handle projectile fire events
-    this.socket.on('projectile:added', (data) => {
-      this.handleProjectileFire(data);
+    // Handle projectile fire from other players
+    this.socket.on('projectile:fire', (data) => {
+      if (data.playerId !== this.socket.id) {
+        this.handleProjectileFire(data);
+      }
     });
     
-    // Handle projectile hit events
+    // Handle projectile hits
     this.socket.on('projectile:hit', (data) => {
       this.handleProjectileHit(data);
     });
     
-    // Handle projectile removed events
-    this.socket.on('projectile:removed', (data) => {
+    // Handle projectile removal
+    this.socket.on('projectile:remove', (data) => {
       this.handleProjectileRemoved(data);
     });
     
-    // Handle being hit by a projectile
+    // Handle player hit
     this.socket.on('player:hit', (data) => {
       this.handlePlayerHit(data);
     });
     
-    // Handle server acknowledgement of inputs
-    this.socket.on('input:ack', (data) => {
-      this.lastProcessedInputTime = data.sequence;
-      
-      // Remove acknowledged inputs from pending inputs
-      this.pendingInputs = this.pendingInputs.filter(input => 
-        input.sequence > this.lastProcessedInputTime
-      );
-    });
-    
-    // Handle server reconciliation
-    this.socket.on('reconcile', (data) => {
-      if (this.serverReconciliationEnabled) {
-        this.reconcileWithServer(data);
+    // Handle explorer state updates
+    this.socket.on('explorer:state', (data) => {
+      if (data.playerId !== this.socket.id) {
+        this.game.handleOtherPlayerExplorer(data);
       }
     });
     
-    // Handle batch player updates
-    this.socket.on('players:batch', (players) => {
-      this.processBatchedPlayers(players);
+    // Handle server reconciliation
+    this.socket.on('server:reconcile', (serverState) => {
+      this.reconcileWithServer(serverState);
     });
     
-    // Handle explorer state updates from other players
-    this.socket.on('explorer:state', (data) => {
-      if (data.playerId === this.socket.id) return; // Skip our own explorer
-      
-      // Get the player
-      const player = this.otherPlayers.get(data.playerId);
-      if (!player) return;
-      
-      // Tell the game to handle the explorer state
-      this.game.handleOtherPlayerExplorer(data);
+    // Handle world data from server
+    this.socket.on('world:data', (worldData) => {
+      console.log('Received world data from server');
+      this.game.setWorldData(worldData);
     });
     
-    // Handle collectible pickup by other players
+    // Handle collectible pickup
     this.socket.on('collectible:pickup', (data) => {
-      if (data.playerId === this.socket.id) return; // Skip our own pickups
-      
-      // Tell the game to remove the collectible
-      this.game.removeCollectible(data.collectibleId);
+      if (data.playerId !== this.socket.id) {
+        this.game.removeCollectible(data.collectibleId);
+      }
     });
     
-    // Receive world data from server
-    this.socket.on('world:data', (data) => {
-      console.log('Received world data from server:', data);
-      this.game.setWorldData(data);
+    // Handle connection errors
+    this.socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+    
+    this.socket.on('connect_timeout', () => {
+      console.error('Socket connection timeout');
+    });
+    
+    this.socket.on('error', (error) => {
+      console.error('Socket error:', error);
+    });
+    
+    this.socket.on('disconnect', (reason) => {
+      console.log('Disconnected from server:', reason);
     });
   }
   
@@ -252,48 +232,23 @@ export class SocketManager {
   }
   
   update(delta) {
-    if (!this.socket?.connected || !this.game.ship) return;
-    
-    const now = Date.now();
-    const hasActiveProjectiles = this.game.projectiles.length > 0;
-    const updateInterval = hasActiveProjectiles ? this.projectileUpdateInterval : this.updateInterval;
-    
-    // Only send updates at the specified interval
-    if (now - this.lastUpdateTime < updateInterval) return;
-    
-    // Create input snapshot
-    const input = this.createInputSnapshot();
-    
-    // Send current state to server
-    const currentState = this.game.getGameState();
-    
-    // Add input sequence number
-    currentState.inputSequence = input.sequence;
-    
-    // Add additional ship rotation data to ensure proper syncing
-    if (currentState.ship) {
-      currentState.ship.rotation = {
-        x: this.game.ship.mesh.rotation.x,
-        y: this.game.ship.mesh.rotation.y,
-        z: this.game.ship.mesh.rotation.z
-      };
-      
-      currentState.ship.direction = {
-        x: this.game.ship.direction.x,
-        y: this.game.ship.direction.y,
-        z: this.game.ship.direction.z
-      };
-    }
-    
-    // Send the complete state including projectiles
-    this.socket.emit('player:state', currentState);
+    if (!this.socket?.connected) return;
     
     // Update other players' interpolation
-    if (this.entityInterpolationEnabled) {
-      this.updateOtherPlayersInterpolation(delta);
+    this.updateOtherPlayersInterpolation(delta);
+    
+    // Handle automatic machine gun fire
+    if (this.game.inputManager) {
+      if (this.game.inputManager.autoFiringLeft) {
+        this.game.fireMachineGun('left');
+      }
+      if (this.game.inputManager.autoFiringRight) {
+        this.game.fireMachineGun('right');
+      }
     }
     
-    this.lastUpdateTime = now;
+    // Send player state (now handled by sendPlayerState method)
+    this.sendPlayerState();
   }
   
   createInputSnapshot() {
@@ -379,7 +334,8 @@ export class SocketManager {
         maxHealth: playerData.ship?.maxHealth || 100
       },
       lastUpdate: Date.now(),
-      projectiles: []
+      projectiles: [],
+      isExploring: false
     };
     
     // If we have ship data, use it
@@ -501,22 +457,28 @@ export class SocketManager {
   }
   
   updateOtherPlayersInterpolation(delta) {
-    this.otherPlayers.forEach((player) => {
+    this.otherPlayers.forEach((player, playerId) => {
+      if (!player.state) return;
+      
       const state = player.state;
       
-      // Interpolate position with dynamic interpolation factor
-      // Use a faster interpolation for ships that are further away
-      const distance = state.position.distanceTo(state.targetPosition);
-      const dynamicFactor = Math.min(1, this.interpolationFactor * (1 + distance * 0.1));
+      // Calculate interpolation factor based on delta time
+      const dynamicFactor = Math.min(1, delta * 10);
       
-      // Apply interpolation to position
-      state.position.lerp(state.targetPosition, dynamicFactor);
-      
-      // Calculate rotation delta for smoother rotation
-      const rotationDelta = this.shortestAngle(
-        state.rotation.y,
-        state.targetRotation.y
+      // Interpolate position
+      const positionDelta = new THREE.Vector3(
+        state.targetPosition.x - state.position.x,
+        state.targetPosition.y - state.position.y,
+        state.targetPosition.z - state.position.z
       );
+      
+      // Only interpolate if the distance is significant
+      if (positionDelta.length() > 0.01) {
+        state.position.add(positionDelta.multiplyScalar(dynamicFactor));
+      }
+      
+      // Interpolate rotation (handle wrapping around 2π)
+      const rotationDelta = this.shortestAngle(state.rotation.y, state.targetRotation.y);
       
       // Apply rotation more directly for smoother turning
       state.rotation.y += rotationDelta * dynamicFactor * 1.5;
@@ -528,8 +490,9 @@ export class SocketManager {
       this.game.updateOtherPlayerShip(player.id, state);
       
       // Remove players that haven't been updated in a while
+      // But don't remove players that are exploring islands
       const now = Date.now();
-      if (now - player.lastUpdate > 10000) {
+      if (now - player.lastUpdate > 10000 && !player.isExploring) {
         console.log('Removing inactive player:', player.id);
         this.removePlayer(player.id);
       }
@@ -593,14 +556,117 @@ export class SocketManager {
   }
   
   sendExplorerState(data) {
-    if (!this.socket?.connected) return;
+    if (!this.socket || !this.socket.connected) {
+      console.warn('Cannot send explorer state: Socket not connected');
+      return;
+    }
     
-    // Add player ID and timestamp
-    data.playerId = this.socket.id;
-    data.timestamp = Date.now();
+    try {
+      // Validate data
+      if (!data || !data.position) {
+        console.warn('Invalid explorer data provided');
+        return;
+      }
+      
+      // Ensure we have all required data
+      const explorerData = {
+        position: {
+          x: (data.position.x !== undefined) ? data.position.x : 0,
+          y: (data.position.y !== undefined) ? data.position.y : 0,
+          z: (data.position.z !== undefined) ? data.position.z : 0
+        },
+        rotation: {
+          y: (data.rotation && data.rotation.y !== undefined) ? data.rotation.y : 0
+        },
+        isActive: data.isActive !== undefined ? data.isActive : false,
+        islandId: data.islandId || null,
+        timestamp: Date.now()
+      };
+      
+      // Send explorer state to server
+      this.socket.emit('explorer_state', explorerData);
+    } catch (error) {
+      console.error('Error sending explorer state:', error);
+    }
+  }
+  
+  // Send player state (ship or explorer) based on current state
+  sendPlayerState() {
+    if (!this.socket || !this.socket.connected || !this.game) {
+      return;
+    }
     
-    // Send to the server
-    this.socket.emit('explorer:state', data);
+    try {
+      // Check if explorer is active
+      if (this.game.explorer && this.game.explorer.isActive && this.game.explorer.mesh) {
+        // Send explorer state
+        const explorerData = {
+          position: {
+            x: this.game.explorer.mesh.position.x,
+            y: this.game.explorer.mesh.position.y,
+            z: this.game.explorer.mesh.position.z
+          },
+          rotation: {
+            y: this.game.explorer.mesh.rotation.y
+          },
+          isActive: true,
+          islandId: this.game.explorer.currentIsland ? this.game.explorer.currentIsland.mesh.uuid : null,
+          playerId: this.socket.id,
+          timestamp: Date.now()
+        };
+        
+        // Send to server
+        this.socket.emit('explorer:state', explorerData);
+      } else if (this.game.playerShip && this.game.playerShip.mesh) {
+        // Send ship state
+        const ship = this.game.playerShip;
+        
+        // Verify ship has all required properties
+        if (!ship.mesh || !ship.mesh.position || !ship.mesh.rotation) {
+          console.warn('Ship missing required properties for state update');
+          return;
+        }
+        
+        // Ensure velocity and angularVelocity exist
+        const velocity = ship.velocity || { x: 0, y: 0, z: 0 };
+        const angularVelocity = ship.angularVelocity || { x: 0, y: 0, z: 0 };
+        
+        // Create input snapshot
+        const inputSnapshot = this.createInputSnapshot();
+        
+        // Create ship state data
+        const shipData = {
+          id: this.socket.id,
+          position: {
+            x: ship.mesh.position.x || 0,
+            y: ship.mesh.position.y || 0,
+            z: ship.mesh.position.z || 0
+          },
+          rotation: {
+            x: ship.mesh.rotation.x || 0,
+            y: ship.mesh.rotation.y || 0,
+            z: ship.mesh.rotation.z || 0
+          },
+          velocity: {
+            x: velocity.x || 0,
+            y: velocity.y || 0,
+            z: velocity.z || 0
+          },
+          angularVelocity: {
+            x: angularVelocity.x || 0,
+            y: angularVelocity.y || 0,
+            z: angularVelocity.z || 0
+          },
+          inputs: inputSnapshot,
+          timestamp: Date.now()
+        };
+        
+        // Send ship state to server
+        this.socket.emit('player:state', shipData);
+      }
+    } catch (error) {
+      console.error('Error sending player state:', error);
+    }
   }
   
   sendCollectiblePickup(data) {

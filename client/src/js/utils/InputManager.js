@@ -2,6 +2,9 @@ export class InputManager {
   constructor(game) {
     this.game = game;
     this.keys = {};
+    this.keysPressed = {}; // Track keys that were just pressed this frame
+    this.keyCodes = {}; // Track key codes (for handling both key and code)
+    this.keyCodesPressed = {}; // Track key codes that were just pressed
     this.mousePosition = { x: 0, y: 0 };
     this.leftMouseDown = false;
     this.rightMouseDown = false;
@@ -41,43 +44,65 @@ export class InputManager {
   }
   
   handleKeyDown(event) {
-    this.keys[event.key] = true;
+    // Track both key and code properties
+    const key = event.key;
+    const code = event.code;
+    
+    // If key wasn't already down, mark it as just pressed
+    if (!this.keys[key]) {
+      this.keysPressed[key] = true;
+    }
+    
+    // If code wasn't already down, mark it as just pressed
+    if (!this.keyCodes[code]) {
+      this.keyCodesPressed[code] = true;
+    }
+    
+    // Store both key and code states
+    this.keys[key] = true;
+    this.keyCodes[code] = true;
     
     // Handle cannon fire on key press, not continuously
-    if (this.RIGHT_CANNON_KEYS.includes(event.key)) {
+    if (this.RIGHT_CANNON_KEYS.includes(key)) {
       this.fireLeftCannon();
-    } else if (this.LEFT_CANNON_KEYS.includes(event.key)) {
+    } else if (this.LEFT_CANNON_KEYS.includes(key)) {
       this.fireRightCannon();
-    } else if (this.FRONT_CANNON_KEY.includes(event.key)) {
+    } else if (this.FRONT_CANNON_KEY.includes(key)) {
       this.fireFrontCannon();
     }
     
     // Handle machine gun fire - toggle state
-    if (this.LEFT_MACHINE_GUN_KEYS.includes(event.key)) {
+    if (this.LEFT_MACHINE_GUN_KEYS.includes(key)) {
       this.autoFiringLeft = true;
-    } else if (this.RIGHT_MACHINE_GUN_KEYS.includes(event.key)) {
+    } else if (this.RIGHT_MACHINE_GUN_KEYS.includes(key)) {
       this.autoFiringRight = true;
     }
     
     // Handle camera toggle
-    if (this.CAMERA_TOGGLE_KEYS.includes(event.key) && this.game.cameraManager) {
+    if (this.CAMERA_TOGGLE_KEYS.includes(key) && this.game.cameraManager) {
       this.game.cameraManager.toggleCameraMode();
     }
     
     // Handle camera presets (only in orbit mode)
-    if (this.CAMERA_PRESET_KEYS.includes(event.key) && this.game.cameraManager) {
-      const presetIndex = parseInt(event.key) - 1;
+    if (this.CAMERA_PRESET_KEYS.includes(key) && this.game.cameraManager) {
+      const presetIndex = parseInt(key) - 1;
       this.game.cameraManager.setPreset(presetIndex);
     }
   }
   
   handleKeyUp(event) {
-    this.keys[event.key] = false;
+    // Track both key and code properties
+    const key = event.key;
+    const code = event.code;
+    
+    // Update key states
+    this.keys[key] = false;
+    this.keyCodes[code] = false;
     
     // Stop automatic fire on key up
-    if (this.LEFT_MACHINE_GUN_KEYS.includes(event.key)) {
+    if (this.LEFT_MACHINE_GUN_KEYS.includes(key)) {
       this.autoFiringLeft = false;
-    } else if (this.RIGHT_MACHINE_GUN_KEYS.includes(event.key)) {
+    } else if (this.RIGHT_MACHINE_GUN_KEYS.includes(key)) {
       this.autoFiringRight = false;
     }
   }
@@ -171,7 +196,23 @@ export class InputManager {
   isTurningRight() {
     return this.RIGHT_KEYS.some(key => this.keys[key]);
   }
-
+  
+  // Check if a key was just pressed this frame
+  isKeyPressed(keyOrCode) {
+    return this.keysPressed[keyOrCode] === true || this.keyCodesPressed[keyOrCode] === true;
+  }
+  
+  // Check if a key is currently down
+  isKeyDown(keyOrCode) {
+    return this.keys[keyOrCode] === true || this.keyCodes[keyOrCode] === true;
+  }
+  
+  // Clear the pressed keys at the end of the frame
+  clearPressedKeys() {
+    this.keysPressed = {};
+    this.keyCodesPressed = {};
+  }
+  
   update(delta) {
     // Process any continuous input
     this.updateAutoFire();
@@ -192,5 +233,8 @@ export class InputManager {
     if (this.isTurningRight()) {
       // No need to call the game here, the game already checks isTurningRight()
     }
+    
+    // Clear pressed keys at the end of the frame
+    this.clearPressedKeys();
   }
 } 

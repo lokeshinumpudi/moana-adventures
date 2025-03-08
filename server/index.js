@@ -94,15 +94,36 @@ function generateIslands() {
       attempts++;
     }
     
-    // Create island
+    // Create island with improved properties for better client-side rendering
+    const radius = minRadius + Math.random() * (maxRadius - minRadius);
+    const height = minHeight + Math.random() * (maxHeight - minHeight);
+    
+    // Generate island type (affects client-side rendering)
+    const islandTypes = ['cone', 'dome', 'plateau'];
+    const islandType = islandTypes[Math.floor(Math.random() * islandTypes.length)];
+    
+    // Create island with enhanced properties
     const island = {
       id: `island_${i}`,
       position: position,
-      radius: minRadius + Math.random() * (maxRadius - minRadius),
-      height: minHeight + Math.random() * (maxHeight - minHeight),
+      radius: radius,
+      height: height,
+      type: islandType,
+      // Add base height to ensure island is above water
+      baseHeight: 1.0,
+      // Add terrain properties for better height calculation
+      terrainFactor: 1.2 + Math.random() * 0.3, // Controls how steep the island is
+      // Add vegetation properties
+      vegetation: true,
+      treeDensity: 0.8 + Math.random() * 0.4, // Controls how many trees
+      maxTreeHeight: 3.5 + Math.random() * 1.5,
+      // Add beach properties
+      beachWidth: 5 + Math.random() * 5,
+      // Add dock properties
       hasDock: Math.random() > 0.2, // 80% chance of having a dock
       dockAngle: Math.random() * Math.PI * 2, // Random angle for dock
-      vegetation: true
+      // Add color variation for client-side rendering
+      colorVariation: Math.random() * 0.2
     };
     
     // Calculate dock position based on radius and angle
@@ -114,11 +135,13 @@ function generateIslands() {
       
       island.dockPosition = {
         x: position.x + dockDirection.x * (island.radius + 20),
-        y: 0,
+        y: 0.5, // Set dock at water level
         z: position.z + dockDirection.z * (island.radius + 20)
       };
       
       island.dockDirection = dockDirection;
+      island.dockLength = 15 + Math.random() * 5; // Randomize dock length
+      island.dockWidth = 4 + Math.random() * 2; // Randomize dock width
     }
     
     worldData.islands.push(island);
