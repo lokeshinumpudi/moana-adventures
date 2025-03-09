@@ -27,6 +27,18 @@ export class Collectible {
       case 'wood':
         this.createWood();
         break;
+      case 'powerup_health':
+        this.createPowerup(0xff0000); // Red for health
+        break;
+      case 'powerup_speed':
+        this.createPowerup(0x00ffff); // Cyan for speed
+        break;
+      case 'powerup_shield':
+        this.createPowerup(0x0000ff); // Blue for shield
+        break;
+      case 'powerup_weapon':
+        this.createPowerup(0xffff00); // Yellow for weapon
+        break;
       default:
         this.createGenericCollectible();
     }
@@ -149,6 +161,38 @@ export class Collectible {
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
+  }
+  
+  createPowerup(color) {
+    // Create a glowing powerup orb
+    const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      emissive: color,
+      emissiveIntensity: 0.5,
+      roughness: 0.2,
+      metalness: 0.8
+    });
+    
+    this.mesh = new THREE.Mesh(geometry, material);
+    
+    // Add glow effect
+    const glowGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.3
+    });
+    
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    this.mesh.add(glowMesh);
+    
+    // Add user data for identification
+    this.mesh.userData.type = this.type;
+    this.mesh.userData.id = this.id;
+    
+    // Make it float higher
+    this.mesh.position.y += 1.5;
   }
   
   update(delta, time) {

@@ -14,6 +14,10 @@ import { Projectile } from './components/Projectile.js';
 import { Island } from './components/Island.js';
 import { Explorer } from './components/Explorer.js';
 import { Collectible } from './components/Collectible.js';
+import { v4 as uuidv4 } from 'uuid';
+import { NotificationManager } from './utils/NotificationManager.js';
+import { DebugOverlay } from './utils/DebugOverlay.js';
+import { PhysicsManager } from './utils/PhysicsManager.js';
 
 export class Game {
   constructor(container) {
@@ -121,31 +125,9 @@ export class Game {
       }
     };
 
-    // Initialize notification system
-    this.notifications = [];
-    this.notificationContainer = document.createElement('div');
-    this.notificationContainer.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      z-index: 9999;
-      pointer-events: none;
-      display: flex;
-      flex-direction: column-reverse;
-      gap: 10px;
-      width: 350px;
-    `;
-    document.body.appendChild(this.notificationContainer);
-    
-    // Add bounce animation style
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-5px); }
-      }
-    `;
-    document.head.appendChild(style);
+    // Replace notification and debug code with utility classes
+    this.notificationManager = new NotificationManager();
+    this.debugOverlay = new DebugOverlay(this);
     
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
@@ -164,6 +146,9 @@ export class Game {
 
     this.explorer = null;
     this.collectibles = [];
+    
+    // Initialize physics
+    this.physicsManager = new PhysicsManager();
   }
   
   init() {
@@ -418,42 +403,42 @@ export class Game {
   }
   
   createIslandsFromData() {
-    if (!this.worldData || !this.worldData.islands) {
-      console.warn('No island data available');
-      return;
-    }
+    console.log('Creating islands from data:', this.worldData.islands);
     
+    // Clear existing islands
+    this.islands.forEach(island => {
+      this.scene.remove(island.mesh);
+    });
     this.islands = [];
     
+    // Create islands from data
     this.worldData.islands.forEach(islandData => {
-      try {
-        // Convert position from server format to THREE.Vector3
-        const position = new THREE.Vector3(
+      const island = new Island({
+        id: islandData.id,
+        position: new THREE.Vector3(
           islandData.position.x,
-          islandData.position.y,
+          islandData.position.y || 0,
           islandData.position.z
-        );
-        
-        // Create island using data from server
-        const island = new Island({
-          position: position,
-          radius: islandData.radius,
-          height: islandData.height,
-          vegetation: islandData.vegetation,
-          dock: islandData.hasDock
-        });
-        
-        // Store the server ID for reference
-        island.serverId = islandData.id;
-        
-        this.scene.add(island.mesh);
-        this.islands.push(island);
-      } catch (error) {
-        console.error("Error creating island from server data:", error);
+        ),
+        radius: islandData.radius,
+        height: islandData.height,
+        vegetation: islandData.vegetation,
+        dock: islandData.hasDock
+      });
+      
+      // Add to scene
+      this.scene.add(island.mesh);
+      
+      // Set up physics
+      if (this.physicsManager) {
+        island.setupPhysics(this.physicsManager);
       }
+      
+      // Add to islands array
+      this.islands.push(island);
     });
     
-    console.log(`Created ${this.islands.length} islands from server data`);
+    console.log(`Created ${this.islands.length} islands`);
   }
   
   createCollectiblesFromData() {
@@ -657,6 +642,7 @@ export class Game {
       creationTime: Date.now(),
       damage: projectileSettings.damage,
       isMachineGun,
+      isOpponent: false,
       update(delta) {
         this.velocity.y -= 9.8 * delta;
         this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
@@ -665,45 +651,31 @@ export class Game {
   }
   
   fireProjectile(side) {
-    // Check cooldown
-    const now = Date.now();
-    if (now - this.lastCannonFireTime < this.cannonCooldown) {
-        return;
-    }
-
-    this.lastCannonFireTime = now;
+    // Delegate to ship's fireProjectile method which handles cooldowns
+    const projectileData = this.ship.fireProjectile(side);
     
-    // Get cannon position based on side
-    let position;
-    if (side === 'left') {
-      position = this.ship.getLeftCannonPosition();
-    } else if (side === 'right') {
-      position = this.ship.getRightCannonPosition();
-    } else {
-      position = this.ship.getFrontCannonPosition();
-    }
+    // If cooldown hasn't elapsed, ship returns null
+    if (!projectileData) return null;
     
-    // Calculate direction based on ship rotation and side
-    let direction = new THREE.Vector3(0, 0, 1);
-    if (side === 'left') {
-      direction.set(-1, 0, 0);
-    } else if (side === 'right') {
-      direction.set(1, 0, 0);
-    }
+    // Create and add projectile using the data from ship
+    const projectile = this.createProjectile(
+      projectileData.position, 
+      projectileData.direction, 
+      false
+    );
     
-    // Rotate direction based on ship rotation
-    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.ship.mesh.rotation.y);
+    // Add unique ID
+    projectile.id = uuidv4();
     
-    // Create and add projectile
-    const projectile = this.createProjectile(position, direction, false);
+    // Add to projectiles array
     this.projectiles.push(projectile);
-
+    
     // Add to scene
     this.scene.add(projectile.mesh);
     
     // Add visual effect
     if (this.particleSystem) {
-      this.particleSystem.createCannonFire(position);
+      this.particleSystem.createCannonFire(projectileData.position);
     }
     
     // Add sound effect
@@ -713,50 +685,36 @@ export class Game {
     
     // Notify SocketManager about the projectile
     if (this.socketManager) {
-      const projectileData = {
+      const projectileNetData = {
         id: projectile.id,
         position: projectile.mesh.position.clone(),
         velocity: projectile.velocity.clone(),
         type: 'cannon'
       };
-      this.socketManager.sendProjectileFired(projectileData);
+      this.socketManager.sendProjectileFired(projectileNetData);
     }
 
     return projectile;
   }
   
   fireMachineGun(side) {
-    // Check cooldown
-    const now = Date.now();
-    if (now - this.lastMachineGunFireTime < this.machineGunCooldown) {
-      return;
-    }
+    // Delegate to ship's fireMachineGun method which handles cooldowns
+    const projectileData = this.ship.fireMachineGun(side);
     
-    this.lastMachineGunFireTime = now;
+    // If cooldown hasn't elapsed, ship returns null
+    if (!projectileData) return null;
     
-    // Get cannon position based on side
-    let position;
-    if (side === 'left') {
-      position = this.ship.getLeftCannonPosition();
-    } else if (side === 'right') {
-      position = this.ship.getRightCannonPosition();
-    } else {
-      position = this.ship.getFrontCannonPosition();
-    }
+    // Create and add projectile using the data from ship
+    const projectile = this.createProjectile(
+      projectileData.position, 
+      projectileData.direction, 
+      true // true for machine gun
+    );
     
-    // Calculate direction based on ship rotation and side
-    let direction = new THREE.Vector3(0, 0, 1);
-    if (side === 'left') {
-      direction.set(-1, 0, 0);
-    } else if (side === 'right') {
-      direction.set(1, 0, 0);
-    }
+    // Add unique ID
+    projectile.id = uuidv4();
     
-    // Rotate direction based on ship rotation
-    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.ship.mesh.rotation.y);
-    
-    // Create and add projectile
-    const projectile = this.createProjectile(position, direction, true); // true for machine gun
+    // Add to projectiles array
     this.projectiles.push(projectile);
     
     // Add to scene
@@ -764,7 +722,7 @@ export class Game {
     
     // Add visual effect
     if (this.particleSystem) {
-      this.particleSystem.createMuzzleFlash(position);
+      this.particleSystem.createMuzzleFlash(projectileData.position);
     }
     
     // Add sound effect
@@ -774,13 +732,13 @@ export class Game {
     
     // Notify SocketManager about the projectile
     if (this.socketManager) {
-      const projectileData = {
+      const projectileNetData = {
         id: projectile.id,
         position: projectile.mesh.position.clone(),
         velocity: projectile.velocity.clone(),
         type: 'machineGun'
       };
-      this.socketManager.sendProjectileFired(projectileData);
+      this.socketManager.sendProjectileFired(projectileNetData);
     }
     
     return projectile;
@@ -1193,8 +1151,14 @@ export class Game {
           leftCannon: Date.now() - this.ship.lastFired.left,
           rightCannon: Date.now() - this.ship.lastFired.right,
           frontCannon: Date.now() - this.ship.lastFired.front
-        } : null
+        } : null,
+        playersOnline: this.socketManager ? this.socketManager.otherPlayers.size  : 0
       });
+    }
+    
+    // Update physics
+    if (this.physicsManager) {
+      this.physicsManager.update(delta);
     }
   }
   
@@ -1270,39 +1234,39 @@ export class Game {
           return;
         }
         
-      for (let i = player.projectiles.length - 1; i >= 0; i--) {
-        const projectile = player.projectiles[i];
-          
+        for (let i = player.projectiles.length - 1; i >= 0; i--) {
+          const projectile = player.projectiles[i];
+            
           // Skip if projectile is invalid
           if (!projectile || !projectile.mesh) {
             player.projectiles.splice(i, 1);
             continue;
           }
+            
+          const age = (Date.now() - projectile.creationTime) / 1000;
           
-        const age = (Date.now() - projectile.creationTime) / 1000;
-        
-        // Skip update for projectiles that are too far away
-        const distanceToPlayer = projectile.mesh.position.distanceTo(playerPosition);
-        if (distanceToPlayer > maxVisibleDistance) {
-          continue;
-        }
-        
-        // Apply physics update
-        projectile.velocity.y -= gravity * delta;
-        projectile.mesh.position.x += projectile.velocity.x * delta;
-        projectile.mesh.position.y += projectile.velocity.y * delta;
-        projectile.mesh.position.z += projectile.velocity.z * delta;
-        
-        // Check if projectile is too old
+          // Skip update for projectiles that are too far away
+          const distanceToPlayer = projectile.mesh.position.distanceTo(playerPosition);
+          if (distanceToPlayer > maxVisibleDistance) {
+            continue;
+          }
+          
+          // Apply physics update
+          projectile.velocity.y -= gravity * delta;
+          projectile.mesh.position.x += projectile.velocity.x * delta;
+          projectile.mesh.position.y += projectile.velocity.y * delta;
+          projectile.mesh.position.z += projectile.velocity.z * delta;
+          
+          // Check if projectile is too old
           if (age > 10) {
             // Remove from scene
-          this.scene.remove(projectile.mesh);
-            
+            this.scene.remove(projectile.mesh);
+              
             // Remove from array
-          player.projectiles.splice(i, 1);
+            player.projectiles.splice(i, 1);
+          }
         }
-      }
-    });
+      });
     }
   }
   
@@ -1312,101 +1276,145 @@ export class Game {
   }
   
   checkPickupCollisions() {
-    if (!this.ship || !this.pickups) return;
+    if (!this.ship || !this.collectibles) return;
     
     const shipPosition = this.ship.mesh.position.clone();
-    const pickupRadius = 3; // Range to collect pickups
+    const pickupRadius = 5; // Distance at which pickups can be collected
     
-    this.pickups.forEach((pickup, index) => {
-      if (!pickup.collected) {
-        const distance = shipPosition.distanceTo(pickup.mesh.position);
-        
-        if (distance < pickupRadius) {
-          // Mark as collected
-          pickup.collected = true;
-          
-          // Remove from scene
-          this.scene.remove(pickup.mesh);
-          
-          // Create pickup effect
-          if (this.particleSystem) {
-            this.particleSystem.createPickupEffect(pickup.mesh.position.clone());
-          }
-          
-          // Apply pickup effect based on type
-          switch (pickup.type) {
-            case 'health':
-              this.ship.health = Math.min(this.ship.maxHealth, this.ship.health + 25);
-              this.showNotification('Health restored +25', 'powerup');
-              break;
-              
-            case 'ammo':
-              // Reset weapon cooldowns
-              this.ship.lastFired = {
-                left: 0,
-                right: 0,
-                front: 0
-              };
-              this.showNotification('Weapons recharged!', 'powerup');
-              break;
-              
-            case 'speed':
-              // Temporary speed boost
-              const originalMaxSpeed = this.ship.maxSpeed;
-              this.ship.maxSpeed *= 1.5;
-              this.hud.addPowerup('speed', 10000); // 10 seconds
-              
-              setTimeout(() => {
-                this.ship.maxSpeed = originalMaxSpeed;
-              }, 10000);
-              
-              this.showNotification('Speed boost activated!', 'powerup');
-              break;
-              
-            case 'shield':
-              // Add temporary invulnerability
-              this.ship.invulnerable = true;
-              this.hud.addPowerup('shield', 15000); // 15 seconds
-              
-              // Create shield visual effect
-              if (!this.ship.shieldEffect) {
-                const shieldGeometry = new THREE.SphereGeometry(5, 16, 16);
-                const shieldMaterial = new THREE.MeshBasicMaterial({
-                  color: 0x0088ff,
-                  transparent: true,
-                  opacity: 0.3
-                });
-                this.ship.shieldEffect = new THREE.Mesh(shieldGeometry, shieldMaterial);
-                this.ship.mesh.add(this.ship.shieldEffect);
-              } else {
-                this.ship.shieldEffect.visible = true;
+    // Check each collectible
+    for (let i = this.collectibles.length - 1; i >= 0; i--) {
+      const collectible = this.collectibles[i];
+      
+      // Skip if no mesh
+      if (!collectible || !collectible.mesh) continue;
+      
+      // Calculate distance
+      const distance = shipPosition.distanceTo(collectible.mesh.position);
+      
+      // Check if within pickup radius
+      if (distance < pickupRadius) {
+        // Handle pickup based on type
+        switch (collectible.type) {
+          case 'treasure':
+            // Add score
+            this.score += collectible.value;
+            this.showNotification(`+${collectible.value} points!`, 'powerup');
+            break;
+            
+          case 'gem':
+            // Add score
+            this.score += collectible.value * 2;
+            this.showNotification(`+${collectible.value * 2} points!`, 'powerup');
+            break;
+            
+          case 'fruit':
+            // Restore health
+            this.ship.health = Math.min(100, this.ship.health + 25);
+            this.showNotification('Health restored +25', 'powerup');
+            break;
+            
+          case 'wood':
+            // Recharge weapons
+            this.lastCannonFireTime = 0;
+            this.lastMachineGunFireTime = 0;
+            this.showNotification('Weapons recharged!', 'powerup');
+            break;
+            
+          case 'powerup_health':
+            // Full health restore
+            this.ship.health = 100;
+            this.showNotification('Health fully restored!', 'powerup');
+            this.hud.addPowerup('health', 5000); // Visual indicator
+            break;
+            
+          case 'powerup_speed':
+            // Temporary speed boost
+            const originalMaxSpeed = this.ship.maxSpeed;
+            this.ship.maxSpeed *= 1.5;
+            this.hud.addPowerup('speed', 10000); // 10 seconds
+            
+            setTimeout(() => {
+              this.ship.maxSpeed = originalMaxSpeed;
+            }, 10000);
+            
+            this.showNotification('Speed boost activated!', 'powerup');
+            break;
+            
+          case 'powerup_shield':
+            // Add temporary invulnerability
+            this.ship.invulnerable = true;
+            this.hud.addPowerup('shield', 15000); // 15 seconds
+            
+            // Create shield visual effect
+            if (!this.ship.shieldEffect) {
+              const shieldGeometry = new THREE.SphereGeometry(5, 16, 16);
+              const shieldMaterial = new THREE.MeshBasicMaterial({
+                color: 0x0088ff,
+                transparent: true,
+                opacity: 0.3
+              });
+              this.ship.shieldEffect = new THREE.Mesh(shieldGeometry, shieldMaterial);
+              this.ship.mesh.add(this.ship.shieldEffect);
+            } else {
+              this.ship.shieldEffect.visible = true;
+            }
+            
+            setTimeout(() => {
+              this.ship.invulnerable = false;
+              if (this.ship.shieldEffect) {
+                this.ship.shieldEffect.visible = false;
               }
-              
-              setTimeout(() => {
-                this.ship.invulnerable = false;
-                if (this.ship.shieldEffect) {
-                  this.ship.shieldEffect.visible = false;
-                }
-              }, 15000);
-              
-              this.showNotification('Shield activated!', 'powerup');
-              break;
-              
-            case 'score':
-              this.score += 100;
-              this.showNotification('+100 points!', 'powerup');
-              break;
-              
-            default:
-              this.score += 10;
-              this.showNotification('+10 points!', 'powerup');
-          }
-          
-          // Remove from pickups array
-          this.pickups.splice(index, 1);
+            }, 15000);
+            
+            this.showNotification('Shield activated!', 'powerup');
+            break;
+            
+          case 'powerup_weapon':
+            // Temporary weapon upgrade
+            this.ship.weaponPowered = true;
+            this.hud.addPowerup('weapon', 20000); // 20 seconds
+            
+            // Store original weapon settings
+            const originalCannonDamage = this.ship.weaponSettings.cannon.damage;
+            const originalMachineGunDamage = this.ship.weaponSettings.machineGun.damage;
+            
+            // Double weapon damage
+            this.ship.weaponSettings.cannon.damage *= 2;
+            this.ship.weaponSettings.machineGun.damage *= 2;
+            
+            setTimeout(() => {
+              this.ship.weaponPowered = false;
+              this.ship.weaponSettings.cannon.damage = originalCannonDamage;
+              this.ship.weaponSettings.machineGun.damage = originalMachineGunDamage;
+            }, 20000);
+            
+            this.showNotification('Weapons powered up!', 'powerup');
+            break;
+            
+          default:
+            this.score += 10;
+            this.showNotification('+10 points!', 'powerup');
+        }
+        
+        // Remove collectible from scene
+        this.scene.remove(collectible.mesh);
+        
+        // Remove from array
+        this.collectibles.splice(i, 1);
+        
+        // Notify server about pickup
+        if (this.socketManager) {
+          this.socketManager.sendCollectiblePickup({
+            collectibleId: collectible.id
+          });
+        }
+        
+        // Add particle effect
+        if (this.particleSystem) {
+          this.particleSystem.createPickupEffect(collectible.mesh.position.clone());
         }
       }
-    });
+    }
   }
   
   checkProjectileCollisions(projectile) {
@@ -1550,226 +1558,15 @@ export class Game {
   }
 
   showNotification(message, type = 'info') {
-    // Check if we already have a notification container
-    if (!this.notificationContainer) {
-      this.notificationContainer = document.createElement('div');
-      this.notificationContainer.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        z-index: 9999;
-        pointer-events: none;
-        width: 350px;
-      `;
-      document.body.appendChild(this.notificationContainer);
-    }
-    
-    // Check if we already have an active notification
-    let notification = this.notificationContainer.querySelector('.game-notification');
-    
-    if (!notification) {
-      // Create a new notification if one doesn't exist
-      notification = document.createElement('div');
-      notification.className = 'game-notification';
-    notification.style.cssText = `
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 15px 20px;
-      border-radius: 12px;
-      margin-bottom: 8px;
-      font-family: 'Arial', sans-serif;
-      font-size: ${type === 'join' || type === 'death' ? '18px' : '16px'};
-      display: flex;
-      align-items: center;
-      backdrop-filter: blur(10px);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-      max-width: 350px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      ${type === 'join' || type === 'death' ? 'font-weight: bold;' : ''}
-    `;
-      this.notificationContainer.appendChild(notification);
-    }
-
-    // Update notification based on message type
-    let iconText = '';
-    switch(type) {
-      case 'join':
-        iconText = '🎮';
-        notification.style.borderLeft = '6px solid #4CAF50';
-        notification.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
-        break;
-      case 'death':
-        iconText = '💀';
-        notification.style.borderLeft = '6px solid #f44336';
-        notification.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
-        break;
-      case 'respawn':
-        iconText = '✨';
-        notification.style.borderLeft = '6px solid #2196F3';
-        notification.style.backgroundColor = 'rgba(33, 150, 243, 0.25)';
-        break;
-      case 'hit':
-        iconText = '💥';
-        notification.style.borderLeft = '6px solid #FFC107';
-        notification.style.backgroundColor = 'rgba(255, 193, 7, 0.25)';
-        break;
-      default:
-        iconText = 'ℹ️';
-        notification.style.borderLeft = '6px solid #9E9E9E';
-    }
-
-    // Clear previous content
-    notification.innerHTML = '';
-
-    // Add icon
-    const icon = document.createElement('span');
-    icon.style.cssText = `
-      margin-right: 12px;
-      font-size: ${type === 'join' || type === 'death' ? '28px' : '20px'};
-      animation: bounce 1s ease infinite;
-      line-height: 1;
-    `;
-    icon.textContent = iconText;
-    notification.appendChild(icon);
-
-    // Add text
-    const text = document.createElement('span');
-    text.textContent = message;
-    text.style.wordBreak = 'break-word';
-    notification.appendChild(text);
-
-    // Make sure notification is visible
-    notification.style.opacity = '1';
-    
-    // Clear any existing timeout
-    if (this.notificationTimeout) {
-      clearTimeout(this.notificationTimeout);
-    }
-
-    // Set timeout to hide notification
-    this.notificationTimeout = setTimeout(() => {
-      notification.style.opacity = '0.5';
-    }, type === 'join' || type === 'death' ? 5000 : 3000);
+    this.notificationManager.showNotification(message, type);
   }
-
-  // Add new method for debug overlay
+  
   createDebugOverlay() {
-    // Create debug container
-    this.debugContainer = document.createElement('div');
-    this.debugContainer.id = 'debug-overlay';
-    this.debugContainer.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background-color: rgba(0, 0, 0, 0.7);
-      color: #00ff00;
-      font-family: monospace;
-      font-size: 14px;
-      padding: 10px;
-      border-radius: 5px;
-      z-index: 1000;
-      pointer-events: none;
-      display: none;
-    `;
-    document.body.appendChild(this.debugContainer);
-    
-    // Create FPS counter
-    this.fpsCounter.element = document.createElement('div');
-    this.fpsCounter.element.id = 'fps-counter';
-    this.fpsCounter.element.textContent = 'FPS: 0';
-    this.debugContainer.appendChild(this.fpsCounter.element);
-    
-    // Create memory usage display
-    this.memoryDisplay = document.createElement('div');
-    this.memoryDisplay.id = 'memory-usage';
-    this.memoryDisplay.textContent = 'Memory: 0 MB';
-    this.debugContainer.appendChild(this.memoryDisplay);
-    
-    // Create entity counter
-    this.entityCounter = document.createElement('div');
-    this.entityCounter.id = 'entity-counter';
-    this.entityCounter.textContent = 'Entities: 0';
-    this.debugContainer.appendChild(this.entityCounter);
-    
-    // Create position display
-    this.positionDisplay = document.createElement('div');
-    this.positionDisplay.id = 'position-display';
-    this.positionDisplay.textContent = 'Position: (0, 0, 0)';
-    this.debugContainer.appendChild(this.positionDisplay);
-    
-    // Create ping display
-    this.pingDisplay = document.createElement('div');
-    this.pingDisplay.id = 'ping-display';
-    this.pingDisplay.textContent = 'Ping: 0ms';
-    this.debugContainer.appendChild(this.pingDisplay);
-    
-    // Add toggle button
-    const toggleButton = document.createElement('button');
-    toggleButton.textContent = 'Debug';
-    toggleButton.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background-color: rgba(0, 0, 0, 0.7);
-      color: #00ff00;
-      border: 1px solid #00ff00;
-      border-radius: 5px;
-      padding: 5px 10px;
-      font-family: monospace;
-      cursor: pointer;
-      z-index: 1001;
-    `;
-    document.body.appendChild(toggleButton);
-    
-    // Add event listener
-    toggleButton.addEventListener('click', () => {
-      this.debugMode = !this.debugMode;
-      this.debugContainer.style.display = this.debugMode ? 'block' : 'none';
-    });
+    // No-op - handled by DebugOverlay utility
   }
-
-  // Add new method to update debug info
+  
   updateDebugInfo(time, delta) {
-    // Update FPS counter
-    this.fpsCounter.frames++;
-    
-    if (time - this.fpsCounter.lastTime >= 1000) {
-      this.fpsCounter.value = Math.round(this.fpsCounter.frames * 1000 / (time - this.fpsCounter.lastTime));
-      this.fpsCounter.frames = 0;
-      this.fpsCounter.lastTime = time;
-      
-      // Update FPS display
-      this.fpsCounter.element.textContent = `FPS: ${this.fpsCounter.value}`;
-      
-      // Update memory usage if available
-      if (window.performance && window.performance.memory) {
-        const memoryUsage = Math.round(window.performance.memory.usedJSHeapSize / 1048576);
-        this.memoryDisplay.textContent = `Memory: ${memoryUsage} MB`;
-      }
-      
-      // Update entity counter
-      const entityCount = (
-        this.projectiles.length + 
-        this.obstacles.length + 
-        this.buoys.length + 
-        this.pickups.length + 
-        (this.socketManager?.otherPlayers.size || 0) + 
-        1 // Player ship
-      );
-      this.entityCounter.textContent = `Entities: ${entityCount}`;
-      
-      // Update position display
-      if (this.ship) {
-        const pos = this.ship.mesh.position;
-        this.positionDisplay.textContent = `Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
-      }
-      
-      // Update ping display
-      if (this.socketManager && this.socketManager.lastPing) {
-        this.pingDisplay.textContent = `Ping: ${this.socketManager.lastPing}ms`;
-      }
-    }
+    this.debugOverlay.update(time, delta);
   }
 
   createOtherPlayerShip(playerData) {
@@ -1948,13 +1745,40 @@ export class Game {
     // Determine if it's a machine gun or cannonball
     const isMachineGun = data.type === 'machineGun';
     
-    // Create the projectile
-    const projectile = this.createProjectile(position, direction, isMachineGun);
+    // Create projectile settings
+    const projectileSettings = isMachineGun ? 
+      this.ship.weaponSettings.machineGun : 
+      this.ship.weaponSettings.cannon;
+
+    // Create custom geometry and material for opponent projectiles
+    const geometry = new THREE.SphereGeometry(projectileSettings.size, 8, 8);
     
-    // Set properties
-    projectile.id = data.id;
-    projectile.playerId = data.playerId;
-    projectile.velocity = velocity.clone();
+    // Use different colors for opponent projectiles
+    const material = new THREE.MeshBasicMaterial({ 
+      color: isMachineGun ? 0xFF4500 : 0xFF0000 // Orange for machine gun, red for cannon
+    });
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position);
+    
+    // Create projectile object
+    const projectile = {
+      id: data.id,
+      playerId: data.playerId,
+      mesh: mesh,
+      velocity: velocity.clone(),
+      creationTime: Date.now(),
+      damage: projectileSettings.damage,
+      isMachineGun,
+      isOpponent: true,
+      update(delta) {
+        this.velocity.y -= 9.8 * delta;
+        this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
+      }
+    };
+    
+    // Add to scene
+    this.scene.add(projectile.mesh);
     
     // Add to player's projectiles array
     player.projectiles.push(projectile);
@@ -2158,34 +1982,48 @@ export class Game {
       this.scene.add(player.explorer.mesh);
     }
     
-    // Handle different explorer actions
-    switch (data.action) {
-      case 'spawn':
-        // Set up the explorer
-        player.explorer.mesh.position.copy(data.position);
-        player.explorer.mesh.rotation.copy(data.rotation);
-        player.explorer.mesh.visible = true;
-        player.explorer.isActive = true;
-        
-        // Find the island
-        const island = this.islands.find(island => island.mesh.uuid === data.islandId);
+    // Update explorer state based on data
+    if (data.isActive) {
+      // Explorer is active
+      player.explorer.isActive = true;
+      player.explorer.mesh.visible = true;
+      
+      // Update position if provided
+      if (data.position) {
+        player.explorer.mesh.position.set(
+          data.position.x,
+          data.position.y,
+          data.position.z
+        );
+      }
+      
+      // Update rotation if provided
+      if (data.rotation) {
+        player.explorer.mesh.rotation.y = data.rotation.y;
+      }
+      
+      // Update island association if provided
+      if (data.islandId) {
+        const island = this.islands.find(island => island.id === data.islandId);
         if (island) {
           player.explorer.currentIsland = island;
         }
-        break;
-        
-      case 'move':
-        // Update position and rotation
-        player.explorer.mesh.position.copy(data.position);
-        player.explorer.mesh.rotation.copy(data.rotation);
-        break;
-        
-      case 'return':
-        // Hide explorer
-        player.explorer.mesh.visible = false;
-        player.explorer.isActive = false;
-        player.explorer.currentIsland = null;
-        break;
+      }
+      
+      // Hide ship if explorer is active
+      if (player.shipMesh) {
+        player.shipMesh.visible = false;
+      }
+    } else {
+      // Explorer is inactive
+      player.explorer.isActive = false;
+      player.explorer.mesh.visible = false;
+      player.explorer.currentIsland = null;
+      
+      // Show ship if explorer is inactive
+      if (player.shipMesh) {
+        player.shipMesh.visible = true;
+      }
     }
   }
 
@@ -2212,4 +2050,4 @@ export class Game {
     // Create world components from server data
     this.createWorldFromData();
   }
-} 
+}

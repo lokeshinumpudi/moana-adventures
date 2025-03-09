@@ -27,11 +27,23 @@ export class Ship {
         speed: 30,
         size: 0.3,
         damage: 10
+      },
+      machineGun: {
+        cooldown: 500,
+        speed: 50,
+        size: 0.2,
+        damage: 5
       }
     };
     
     // Cooldown tracking
     this.lastFired = {
+      left: 0,
+      right: 0,
+      front: 0
+    };
+    
+    this.lastMachineGunFired = {
       left: 0,
       right: 0,
       front: 0
@@ -44,9 +56,6 @@ export class Ship {
     this.maxHealth = 100;
     this.health = 100;
     this.originalColor = new THREE.Color(0x8B4513);
-    
-    // Create single notification element
-    this.createNotificationElement();
   }
   
   async init() {
@@ -131,9 +140,9 @@ export class Ship {
   update(delta, inputManager = null) {
     // If we have an input manager, update based on input
     if (inputManager) {
-      // If explorer is active, don't process ship controls
-      if (this.game && this.game.explorer && this.game.explorer.isActive) {
-        // Don't process controls when explorer is active
+      // If explorer is active or ship is docked, don't process ship controls
+      if ((this.game && this.game.explorer && this.game.explorer.isActive) || this.isDocked) {
+        // Don't process controls when explorer is active or ship is docked
         // Apply deceleration to slow down gradually
         if (Math.abs(this.speed) > 0.1) {
           this.speed *= 0.95; // Slow down gradually
@@ -150,48 +159,36 @@ export class Ship {
         } else {
           // Apply deceleration when no movement keys are pressed
           if (Math.abs(this.speed) > 0.1) {
-            this.speed *= 0.98;
+            this.speed *= 0.95; // Slow down gradually
           } else {
-            this.speed = 0;
-      }
-    }
-    
-    // Handle rotation
+            this.speed = 0; // Stop completely when slow enough
+          }
+        }
+        
+        // Handle rotation
         if (inputManager.keys['a'] || inputManager.keys['ArrowLeft']) {
-      this.mesh.rotation.y += this.rotationSpeed * delta;
-    }
+          this.mesh.rotation.y += this.rotationSpeed * delta;
+        }
         if (inputManager.keys['d'] || inputManager.keys['ArrowRight']) {
-      this.mesh.rotation.y -= this.rotationSpeed * delta;
+          this.mesh.rotation.y -= this.rotationSpeed * delta;
         }
       }
     }
     
-    // Update the direction based on rotation
-    this.direction.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+    // Update position based on speed and direction
+    if (Math.abs(this.speed) > 0.1 && !this.isDocked) {
+      // Calculate movement direction based on ship rotation
+      this.direction.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      
+      // Calculate velocity
+      this.velocity.copy(this.direction).multiplyScalar(this.speed * delta);
+      
+      // Update position
+      this.mesh.position.add(this.velocity);
+    }
     
-    // Calculate velocity
-    this.velocity.copy(this.direction).multiplyScalar(this.speed * delta);
-    
-    // Update position
-    this.mesh.position.add(this.velocity);
-    
-    // Make the ship float on water
-    // Calculate wave height based on position and time
-    const time = Date.now() * 0.001;
-    const waveHeight = this.calculateWaveHeight(this.mesh.position.x, this.mesh.position.z, time);
-    
-    // Set the ship's y position to float on the water
-    this.mesh.position.y = waveHeight;
-    
-    // Apply gentle rocking based on waves
-    const pitchAmount = Math.sin(time * 0.5 + this.mesh.position.x * 0.02) * 0.05;
-    const rollAmount = Math.sin(time * 0.7 + this.mesh.position.z * 0.02) * 0.05;
-    
-    // Apply pitch and roll while preserving yaw (y-axis rotation)
-    const yawRotation = this.mesh.rotation.y;
-    this.mesh.rotation.x = pitchAmount;
-    this.mesh.rotation.z = rollAmount;
-    this.mesh.rotation.y = yawRotation;
+    // Update wave effect
+    this.updateWaveEffect(delta);
   }
   
   calculateWaveHeight(x, z, time) {
@@ -208,22 +205,33 @@ export class Ship {
     this.health = Math.max(0, this.health - damage);
     
     // Show damage notification
-    this.showNotification(`Damage taken: ${damage}`, 'warning');
+    if (this.game) {
+      this.game.showNotification(`Damage taken: ${damage}`, 'hit');
+    }
     
     // Flash red
     if (this.hull && this.hull.material) {
-    this.hull.material.color.setHex(0xff0000);
-    
-    // Revert back to original color after 200ms
-    setTimeout(() => {
-      this.hull.material.color.copy(this.originalColor);
-    }, 200);
+      this.hull.material.color.setHex(0xff0000);
+      
+      // Revert back to original color after 200ms
+      setTimeout(() => {
+        this.hull.material.color.copy(this.originalColor);
+      }, 200);
     }
     
     return this.health <= 0;
   }
   
+  // Add a method to check if firing is allowed
+  canFire() {
+    // Cannot fire if docked or explorer is active
+    return !this.isDocked && !(this.game && this.game.explorer && this.game.explorer.isActive);
+  }
+  
   fireProjectile(side) {
+    // Check if firing is allowed
+    if (!this.canFire()) return null;
+    
     const now = Date.now();
     
     // Check if the cannon is ready to fire
@@ -259,12 +267,57 @@ export class Ship {
       direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     }
     
-    // Create and return projectile
-    return this.createProjectile(position, direction, false);
+    // Return position and direction data for Game to use
+    return {
+      position,
+      direction
+    };
   }
   
-  createProjectile(position, direction, isMachineGun = false) {
-    return new Projectile(position, direction, this.weaponSettings.cannon.speed, this.weaponSettings.cannon.damage, false);
+  fireMachineGun(side) {
+    // Check if firing is allowed
+    if (!this.canFire()) return null;
+    
+    const now = Date.now();
+    
+    // Check if the machine gun is ready to fire
+    if (side === 'left' && now - this.lastMachineGunFired.left < this.weaponSettings.machineGun.cooldown) {
+      return null;
+    }
+    
+    if (side === 'right' && now - this.lastMachineGunFired.right < this.weaponSettings.machineGun.cooldown) {
+      return null;
+    }
+    
+    if (side === 'front' && now - this.lastMachineGunFired.front < this.weaponSettings.machineGun.cooldown) {
+      return null;
+    }
+    
+    // Update last fired time
+    this.lastMachineGunFired[side] = now;
+    
+    // Get cannon position and direction
+    let position, direction;
+    
+    if (side === 'left') {
+      position = this.getLeftCannonPosition();
+      direction = new THREE.Vector3(-1, 0, 0);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+    } else if (side === 'right') {
+      position = this.getRightCannonPosition();
+      direction = new THREE.Vector3(1, 0, 0);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+    } else if (side === 'front') {
+      position = this.getFrontCannonPosition();
+      direction = new THREE.Vector3(0, 0, -1);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+    }
+    
+    // Return position and direction data for Game to use
+    return {
+      position,
+      direction
+    };
   }
   
   getLeftCannonPosition() {
@@ -283,83 +336,6 @@ export class Ship {
     const position = new THREE.Vector3();
     this.frontCannon.getWorldPosition(position);
     return position;
-  }
-  
-  createNotificationElement() {
-    this.notificationContainer = document.createElement('div');
-    this.notificationContainer.id = 'notification-container';
-    this.notificationContainer.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      z-index: 9999;
-      pointer-events: none;
-      width: 350px;
-    `;
-    document.body.appendChild(this.notificationContainer);
-  }
-  
-  showNotification(message, type = 'info') {
-    // Check if we already have an active notification
-    let notification = this.notificationContainer.querySelector('.game-notification');
-    
-    if (!notification) {
-      // Create a new notification if one doesn't exist
-      notification = document.createElement('div');
-      notification.className = 'game-notification';
-      notification.style.cssText = `
-        background: rgba(0, 0, 0, 0.9);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 12px;
-        margin-bottom: 8px;
-        font-family: 'Arial', sans-serif;
-        font-size: 16px;
-        display: flex;
-        align-items: center;
-        backdrop-filter: blur(10px);
-        border-left: 6px solid #9E9E9E;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        max-width: 350px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      `;
-      this.notificationContainer.appendChild(notification);
-    }
-
-    // Update notification style based on type
-    switch(type) {
-      case 'warning':
-        notification.style.borderLeft = '6px solid #FFC107';
-        notification.style.backgroundColor = 'rgba(255, 193, 7, 0.25)';
-        break;
-      case 'danger':
-        notification.style.borderLeft = '6px solid #f44336';
-        notification.style.backgroundColor = 'rgba(244, 67, 54, 0.25)';
-        break;
-      case 'success':
-        notification.style.borderLeft = '6px solid #4CAF50';
-        notification.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
-        break;
-      default:
-        notification.style.borderLeft = '6px solid #9E9E9E';
-        notification.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
-    }
-
-    // Set the notification text
-    notification.textContent = message;
-
-    // Make sure notification is visible
-    notification.style.opacity = '1';
-    
-    // Clear any existing timeout
-    if (this.notificationTimeout) {
-      clearTimeout(this.notificationTimeout);
-    }
-
-    // Set timeout to hide notification
-    this.notificationTimeout = setTimeout(() => {
-      notification.style.opacity = '0.3';
-    }, 3000);
   }
 
   // Add collision detection
@@ -411,21 +387,30 @@ export class Ship {
   dockAt(island) {
     if (!this.canDockAt(island)) return false;
     
-    // Move ship to docking position and align with dock
-    const dockingPosition = island.dockPosition.clone();
-    dockingPosition.y = this.mesh.position.y; // Maintain current height
+    // Get docking info
+    const dockInfo = island.getDockingInfo();
     
-    // Store original position and rotation for undocking
+    // Store original position
     this.originalPosition = this.mesh.position.clone();
-    this.originalRotation = this.mesh.rotation.clone();
     
-    // Align with dock
-    this.mesh.position.copy(dockingPosition);
+    // Move to dock position
+    this.mesh.position.copy(dockInfo.position);
     
-    // Stop the ship
-    this.speed = 0;
+    // Rotate to face away from dock
+    const lookAtPos = new THREE.Vector3().copy(dockInfo.position).add(dockInfo.direction);
+    this.mesh.lookAt(lookAtPos);
+    
+    // Set docked state
     this.isDocked = true;
     this.dockedAt = island;
+    
+    // Stop movement
+    this.speed = 0;
+    
+    // Notify game if available
+    if (this.game) {
+      this.game.showNotification('Ship docked at island', 'info');
+    }
     
     return true;
   }
@@ -459,5 +444,29 @@ export class Ship {
   // Check if ship can allow explorer to disembark
   canDisembark(island) {
     return this.isNearIsland(island) || this.isDocked;
+  }
+
+  // Add wave effect to the ship
+  updateWaveEffect(delta) {
+    // Skip wave effect if docked
+    if (this.isDocked) return;
+    
+    // Make the ship float on water
+    // Calculate wave height based on position and time
+    const time = Date.now() * 0.001;
+    const waveHeight = this.calculateWaveHeight(this.mesh.position.x, this.mesh.position.z, time);
+    
+    // Set the ship's y position to float on the water
+    this.mesh.position.y = waveHeight;
+    
+    // Apply gentle rocking based on waves
+    const pitchAmount = Math.sin(time * 0.5 + this.mesh.position.x * 0.02) * 0.05;
+    const rollAmount = Math.sin(time * 0.7 + this.mesh.position.z * 0.02) * 0.05;
+    
+    // Apply pitch and roll while preserving yaw (y-axis rotation)
+    const yawRotation = this.mesh.rotation.y;
+    this.mesh.rotation.x = pitchAmount;
+    this.mesh.rotation.z = rollAmount;
+    this.mesh.rotation.y = yawRotation;
   }
 } 

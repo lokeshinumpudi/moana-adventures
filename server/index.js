@@ -39,7 +39,16 @@ const WORLD_CONFIG = {
   },
   collectibles: {
     perIsland: { min: 5, max: 10 }, // Number of collectibles per island
-    types: ['treasure', 'gem', 'fruit', 'wood'] // Types of collectibles
+    types: [
+      'treasure', 
+      'gem', 
+      'fruit', 
+      'wood',
+      'powerup_health',
+      'powerup_speed',
+      'powerup_shield',
+      'powerup_weapon'
+    ] // Types of collectibles
   },
   obstacles: {
     count: 20, // Number of obstacles
@@ -332,6 +341,37 @@ function updateProjectilePhysics() {
           fromPlayerId: projectile.ownerId
         });
         
+        // Check if this hit would kill the player
+        const targetPlayer = players.get(playerId);
+        if (targetPlayer && targetPlayer.ship && targetPlayer.ship.health) {
+          // Calculate new health
+          const newHealth = targetPlayer.ship.health - (projectile.type === 'machineGun' ? 1 : 10);
+          
+          // If player would die from this hit
+          if (newHealth <= 0) {
+            // Increment killer's kill count
+            const killer = players.get(projectile.ownerId);
+            if (killer) {
+              killer.kills = (killer.kills || 0) + 1;
+              
+              // Notify killer about their new kill count
+              io.to(projectile.ownerId).emit('player:kill', {
+                targetId: playerId,
+                kills: killer.kills
+              });
+              
+              // Broadcast updated killer stats to all players
+              io.emit('player:updated', {
+                id: projectile.ownerId,
+                kills: killer.kills
+              });
+            }
+          }
+          
+          // Update target player's health
+          targetPlayer.ship.health = Math.max(0, newHealth);
+        }
+        
         // Emit hit event to the player who fired
         io.to(projectile.ownerId).emit('projectile:hit', {
           id: id,
@@ -528,6 +568,74 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle explorer state updates
+  socket.on('explorer:state', (data) => {
+    try {
+      if (!players.has(socket.id)) return;
+      
+      // Update player's explorer state
+      const player = players.get(socket.id);
+      player.explorer = data;
+      
+      // Broadcast explorer state to all other players
+      socket.broadcast.emit('explorer:state', {
+        playerId: socket.id,
+        isActive: data.isActive,
+        position: data.position,
+        rotation: data.rotation,
+        islandId: data.islandId,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('Error handling explorer state update:', error);
+    }
+  });
+  
+  // Handle collectible pickup
+  socket.on('collectible:pickup', (data) => {
+    try {
+      if (!players.has(socket.id)) return;
+      
+      // Find the collectible in our world data
+      const collectibleIndex = worldData.collectibles.findIndex(c => c.id === data.collectibleId);
+      
+      if (collectibleIndex !== -1) {
+        // Remove the collectible from our world data
+        const collectible = worldData.collectibles.splice(collectibleIndex, 1)[0];
+        
+        // Broadcast to all clients that this collectible is gone
+        io.emit('collectible:removed', {
+          id: collectible.id,
+          playerId: socket.id
+        });
+        
+        // Optionally add to player's score/inventory
+        const player = players.get(socket.id);
+        if (player) {
+          // Add score based on collectible type
+          switch (collectible.type) {
+            case 'treasure':
+              player.score = (player.score || 0) + (collectible.value || 10);
+              break;
+            case 'gem':
+              player.score = (player.score || 0) + (collectible.value || 20) * 2;
+              break;
+            default:
+              player.score = (player.score || 0) + 10;
+          }
+          
+          // Broadcast updated player score
+          io.emit('player:updated', {
+            id: socket.id,
+            score: player.score
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error handling collectible pickup:', error);
+    }
+  });
+
   // Handle disconnection
   socket.on('disconnect', (reason) => {
     console.log(`[${new Date().toISOString()}] Player disconnected:`, socket.id);
@@ -553,26 +661,6 @@ io.on('connection', (socket) => {
 
   // Send world data to the client
   socket.emit('world:data', worldData);
-  
-  // Handle collectible pickup
-  socket.on('collectible:pickup', (data) => {
-    // Find the collectible in our world data
-    const collectibleIndex = worldData.collectibles.findIndex(c => c.id === data.collectibleId);
-    
-    if (collectibleIndex !== -1) {
-      // Remove the collectible from our world data
-      const collectible = worldData.collectibles.splice(collectibleIndex, 1)[0];
-      
-      // Broadcast to all clients that this collectible is gone
-      io.emit('collectible:removed', {
-        id: collectible.id,
-        playerId: data.playerId
-      });
-      
-      // Optionally add to player's score/inventory
-      // ...
-    }
-  });
 });
 
 const PORT = process.env.PORT || 3000;

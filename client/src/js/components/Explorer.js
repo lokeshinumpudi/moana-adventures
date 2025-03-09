@@ -96,12 +96,7 @@ export class Explorer {
     
     // Notify server if multiplayer
     if (this.game.socketManager) {
-      this.game.socketManager.sendExplorerState({
-        action: 'spawn',
-        position: this.mesh.position.clone(),
-        rotation: this.mesh.rotation.clone(),
-        islandId: island.mesh.uuid
-      });
+      this.sendPositionUpdate();
     }
   }
   
@@ -109,6 +104,7 @@ export class Explorer {
   returnToShip() {
     if (!this.isActive || !this.parentShip) return;
     
+    // Hide explorer
     this.mesh.visible = false;
     this.isActive = false;
     
@@ -118,9 +114,7 @@ export class Explorer {
       controls.classList.add('hidden');
     }
     
-    this.game.showNotification('You have returned to your ship.', 'info');
-    
-    // Pass collected items to the ship
+    // Return any collected items to the ship
     if (this.inventory.length > 0) {
       this.game.showNotification(`You brought back ${this.inventory.length} items to your ship!`, 'powerup');
       this.inventory = [];
@@ -129,12 +123,11 @@ export class Explorer {
     // Notify server if multiplayer
     if (this.game.socketManager) {
       this.game.socketManager.sendExplorerState({
-        action: 'return',
-        shipPosition: this.parentShip.position.clone()
+        isActive: false
       });
     }
     
-    this.currentIsland = null;
+    // Return ship info for camera repositioning
     return this.parentShip;
   }
   
@@ -181,39 +174,19 @@ export class Explorer {
       didMove = true;
     }
     
-    // Ensure character stays on island
-    if (didMove && this.currentIsland) {
-      const distanceToIsland = this.mesh.position.distanceTo(this.currentIsland.position);
-      
-      // If explorer is too far from island, pull them back
-      if (distanceToIsland > this.currentIsland.radius) {
-        const direction = this.mesh.position.clone().sub(this.currentIsland.position).normalize();
-        this.mesh.position.copy(this.currentIsland.position.clone().add(
-          direction.multiplyScalar(this.currentIsland.radius - 1)
-        ));
-      }
-      
-      // Set Y position based on island height
-      const dx = this.mesh.position.x - this.currentIsland.position.x;
-      const dz = this.mesh.position.z - this.currentIsland.position.z;
-      const height = this.currentIsland.getHeightAt(dx, dz);
-      this.mesh.position.y = height + 0.5; // Slightly above terrain
-      
-      // Send position update to server
-      if (this.game.socketManager) {
-        this.game.socketManager.sendExplorerState({
-          action: 'move',
-          position: this.mesh.position.clone(),
-          rotation: this.mesh.rotation.clone()
-        });
-      }
-    }
-    
     // Check for collectibles
     this.checkCollectibles();
     
-    // Check if near ship for return
+    // Check if player is near ship to return
     this.checkReturnToShip();
+    
+    // Keep player on the island
+    this.constrainToIsland();
+    
+    // Send position update to server if moved
+    if (didMove && this.game.socketManager) {
+      this.sendPositionUpdate();
+    }
   }
   
   checkCollectibles() {
@@ -279,5 +252,51 @@ export class Explorer {
     // Fallback to distance from island edge
     const distanceToIsland = shipPosition.distanceTo(island.position);
     return distanceToIsland < (island.radius + 10) && distanceToIsland > (island.radius - 5);
+  }
+  
+  // Send explorer position to server
+  sendPositionUpdate() {
+    if (!this.game.socketManager) return;
+    
+    this.game.socketManager.sendExplorerState({
+      isActive: this.isActive,
+      position: {
+        x: this.mesh.position.x,
+        y: this.mesh.position.y,
+        z: this.mesh.position.z
+      },
+      rotation: {
+        y: this.mesh.rotation.y
+      },
+      islandId: this.currentIsland ? this.currentIsland.id : null
+    });
+  }
+  
+  // Constrain player to the island
+  constrainToIsland() {
+    if (!this.currentIsland) return;
+    
+    // Get distance from island center
+    const islandPosition = this.currentIsland.position;
+    const dx = this.mesh.position.x - islandPosition.x;
+    const dz = this.mesh.position.z - islandPosition.z;
+    const distanceFromCenter = Math.sqrt(dx * dx + dz * dz);
+    
+    // If player is beyond island radius, move them back
+    const maxRadius = this.currentIsland.radius * 0.9; // 90% of island radius
+    if (distanceFromCenter > maxRadius) {
+      // Calculate direction from center to player
+      const direction = new THREE.Vector3(dx, 0, dz).normalize();
+      
+      // Set player position to edge of allowed area
+      this.mesh.position.x = islandPosition.x + direction.x * maxRadius;
+      this.mesh.position.z = islandPosition.z + direction.z * maxRadius;
+    }
+    
+    // Adjust player height based on island terrain
+    if (this.currentIsland.getHeightAt) {
+      const height = this.currentIsland.getHeightAt(this.mesh.position.x, this.mesh.position.z);
+      this.mesh.position.y = height + 1; // Position player 1 unit above terrain
+    }
   }
 } 

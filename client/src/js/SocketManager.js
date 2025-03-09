@@ -135,7 +135,7 @@ export class SocketManager {
     
     // Handle player updates from server
     this.socket.on('player:updated', (playerData) => {
-      console.log('Received player update from server:', playerData);
+      
       if (playerData.id !== this.socket.id) {
         const existingPlayer = this.otherPlayers.get(playerData.id);
         if (existingPlayer) {
@@ -212,6 +212,22 @@ export class SocketManager {
       
       // Tell the game to remove the collectible
       this.game.removeCollectible(data.collectibleId);
+    });
+    
+    // Handle kill notifications
+    this.socket.on('player:kill', (data) => {
+      // Update local kill count
+      this.game.kills++;
+      
+      // Show notification
+      this.game.showNotification(`You eliminated ${data.targetId.substring(0, 4)}!`, 'kill');
+      
+      // Update HUD
+      if (this.game.hud) {
+        this.game.hud.updateStats({
+          kills: this.game.kills
+        });
+      }
     });
     
     // Receive world data from server
