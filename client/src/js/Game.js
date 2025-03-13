@@ -1152,7 +1152,7 @@ export class Game {
           rightCannon: Date.now() - this.ship.lastFired.right,
           frontCannon: Date.now() - this.ship.lastFired.front
         } : null,
-        playersOnline: this.socketManager ? this.socketManager.otherPlayers.size  : 0
+        playersOnline: this.socketManager ? this.socketManager.otherPlayers.size +1 : 0
       });
     }
     

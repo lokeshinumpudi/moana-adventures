@@ -7,9 +7,9 @@ jest.mock('../../src/js/components/Projectile', () => {
     Projectile: jest.fn().mockImplementation((scene, options) => {
       // Call the scene.add method
       scene.add({});
-      
+
       const trail = options.trail === true ? {} : undefined;
-      
+
       return {
         scene,
         ...options,
@@ -48,7 +48,7 @@ describe('Projectile', () => {
       add: jest.fn(),
       remove: jest.fn()
     };
-    
+
     // Create mock options
     mockOptions = {
       position: { x: 0, y: 0, z: 0 },
@@ -60,7 +60,7 @@ describe('Projectile', () => {
       owner: 'player1',
       lifetime: 5000
     };
-    
+
     // Create projectile instance
     projectile = new Projectile(mockScene, mockOptions);
   });
@@ -87,9 +87,9 @@ describe('Projectile', () => {
       owner: 'player2',
       lifetime: 3000
     };
-    
+
     const customProjectile = new Projectile(mockScene, customOptions);
-    
+
     expect(customProjectile.mesh.position.x).toBe(10);
     expect(customProjectile.mesh.position.y).toBe(5);
     expect(customProjectile.mesh.position.z).toBe(20);
@@ -111,10 +111,10 @@ describe('Projectile', () => {
   test('should update projectile position based on direction and speed', () => {
     // Set initial position
     projectile.mesh.position = { x: 0, y: 0, z: 0 };
-    
+
     // Call update method
     projectile.update(0.1); // 0.1 seconds
-    
+
     // Check if update was called
     expect(projectile.update).toHaveBeenCalledWith(0.1);
   });
@@ -122,14 +122,14 @@ describe('Projectile', () => {
   test('should apply gravity when gravity is enabled', () => {
     // Enable gravity
     projectile.gravity = true;
-    
+
     // Set initial position and velocity
     projectile.mesh.position = { x: 0, y: 10, z: 0 };
     projectile.velocity = { x: 0, y: 0, z: 0 };
-    
+
     // Call update method
     projectile.update(0.1); // 0.1 seconds
-    
+
     // Check if update was called
     expect(projectile.update).toHaveBeenCalledWith(0.1);
   });
@@ -137,10 +137,10 @@ describe('Projectile', () => {
   test('should mark projectile as dead when lifetime is exceeded', () => {
     // Set creation time to be more than lifetime ago
     projectile.creationTime = Date.now() - 6000; // 6 seconds ago
-    
+
     // Call update method
     projectile.update(0.1);
-    
+
     // Check if update was called
     expect(projectile.update).toHaveBeenCalledWith(0.1);
   });
@@ -148,7 +148,7 @@ describe('Projectile', () => {
   test('should remove projectile from scene when dispose is called', () => {
     // Call dispose method
     projectile.dispose();
-    
+
     // Check if dispose was called
     expect(projectile.dispose).toHaveBeenCalled();
   });
@@ -159,7 +159,7 @@ describe('Projectile', () => {
       ...mockOptions,
       trail: true
     });
-    
+
     // Check if trail was created
     expect(projectileWithTrail.trail).toBeDefined();
   });
@@ -170,7 +170,7 @@ describe('Projectile', () => {
       ...mockOptions,
       trail: false
     });
-    
+
     // Check if trail was not created
     expect(projectileWithoutTrail.trail).toBeUndefined();
   });

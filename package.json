@@ -1,0 +1,23 @@
+{
+  "name": "moana-city",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "yarn workspaces run dev",
+    "build:client": "yarn workspace client build",
+    "build": "yarn build:client",
+    "start:client": "yarn workspace client dev",
+    "start:server": "yarn workspace server start",
+    "start": "yarn start:client || yarn start:server",
+    "clean": "yarn workspaces run clean",
+    "lint": "yarn workspaces run lint",
+    "test": "yarn workspaces run test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
