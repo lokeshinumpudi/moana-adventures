@@ -11,13 +11,27 @@
     "build:client": "yarn workspace client build",
     "build": "yarn build:client",
     "start:client": "yarn workspace client dev",
-    "start:server": "yarn workspace server start",
+    "start:server": "yarn workspace moana-city-server start",
     "start": "yarn start:client && yarn start:server",
     "clean": "yarn workspaces run clean",
     "lint": "yarn workspaces run lint",
-    "test": "yarn workspaces run test"
+    "lint:fix": "yarn workspaces run lint:fix",
+    "test": "yarn workspaces run test",
+    "prepare": "husky install"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2"
+  },
+  "lint-staged": {
+    "client/**/*.{js,jsx}": [
+      "eslint --fix"
+    ],
+    "server/**/*.js": [
+      "eslint --fix"
+    ]
   }
 }

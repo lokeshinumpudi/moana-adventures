@@ -5,7 +5,7 @@ const CANNON = {
     addBody: jest.fn(),
     removeBody: jest.fn(),
     addContactMaterial: jest.fn(),
-    step: jest.fn()
+    step: jest.fn(),
   })),
   Body: jest.fn().mockImplementation(() => ({
     position: { x: 0, y: 0, z: 0 },
@@ -15,7 +15,7 @@ const CANNON = {
     applyForce: jest.fn(),
     applyImpulse: jest.fn(),
     applyLocalForce: jest.fn(),
-    applyLocalImpulse: jest.fn()
+    applyLocalImpulse: jest.fn(),
   })),
   Vec3: jest.fn().mockImplementation((x = 0, y = 0, z = 0) => ({
     x, y, z,
@@ -32,18 +32,18 @@ const CANNON = {
       return this;
     }),
     normalize: jest.fn().mockReturnThis(),
-    length: jest.fn().mockReturnValue(1)
+    length: jest.fn().mockReturnValue(1),
   })),
   Quaternion: jest.fn().mockImplementation(() => ({
     x: 0, y: 0, z: 0, w: 1,
-    setFromAxisAngle: jest.fn()
+    setFromAxisAngle: jest.fn(),
   })),
   Material: jest.fn(),
   ContactMaterial: jest.fn(),
   Box: jest.fn(),
   Sphere: jest.fn(),
   Cylinder: jest.fn(),
-  Plane: jest.fn()
+  Plane: jest.fn(),
 };
 
-export default CANNON; 
+export default CANNON;

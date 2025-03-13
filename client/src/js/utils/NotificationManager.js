@@ -7,7 +7,7 @@ export class NotificationManager {
     this.notificationTimeout = null;
     this.initialize();
   }
-  
+
   initialize() {
     if (!this.notificationContainer) {
       this.notificationContainer = document.createElement('div');
@@ -15,11 +15,11 @@ export class NotificationManager {
       document.body.appendChild(this.notificationContainer);
     }
   }
-  
+
   showNotification(message, type = 'info') {
     // Check if we already have an active notification
     let notification = this.notificationContainer.querySelector('.game-notification');
-    
+
     if (!notification) {
       // Create a new notification if one doesn't exist
       notification = document.createElement('div');
@@ -30,29 +30,29 @@ export class NotificationManager {
     // Update notification based on message type
     let iconText = '';
     switch(type) {
-      case 'join':
-        iconText = '🎮';
-        notification.className = 'game-notification notification-join';
-        break;
-      case 'death':
-        iconText = '💀';
-        notification.className = 'game-notification notification-death';
-        break;
-      case 'respawn':
-        iconText = '✨';
-        notification.className = 'game-notification notification-respawn';
-        break;
-      case 'hit':
-        iconText = '💥';
-        notification.className = 'game-notification notification-hit';
-        break;
-      case 'kill':
-        iconText = '🏆';
-        notification.className = 'game-notification notification-kill';
-        break;
-      default:
-        iconText = 'ℹ️';
-        notification.className = 'game-notification notification-info';
+    case 'join':
+      iconText = '🎮';
+      notification.className = 'game-notification notification-join';
+      break;
+    case 'death':
+      iconText = '💀';
+      notification.className = 'game-notification notification-death';
+      break;
+    case 'respawn':
+      iconText = '✨';
+      notification.className = 'game-notification notification-respawn';
+      break;
+    case 'hit':
+      iconText = '💥';
+      notification.className = 'game-notification notification-hit';
+      break;
+    case 'kill':
+      iconText = '🏆';
+      notification.className = 'game-notification notification-kill';
+      break;
+    default:
+      iconText = 'ℹ️';
+      notification.className = 'game-notification notification-info';
     }
 
     // Clear previous content
@@ -72,7 +72,7 @@ export class NotificationManager {
 
     // Make sure notification is visible
     notification.classList.remove('fadeout');
-    
+
     // Clear any existing timeout
     if (this.notificationTimeout) {
       clearTimeout(this.notificationTimeout);
@@ -83,4 +83,4 @@ export class NotificationManager {
       notification.classList.add('fadeout');
     }, type === 'join' || type === 'death' ? 5000 : 3000);
   }
-} 
+}

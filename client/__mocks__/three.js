@@ -4,19 +4,19 @@ const THREE = {
     add: jest.fn(),
     remove: jest.fn(),
     children: [],
-    background: null
+    background: null,
   })),
   PerspectiveCamera: jest.fn().mockImplementation(() => ({
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
-    lookAt: jest.fn()
+    lookAt: jest.fn(),
   })),
   WebGLRenderer: jest.fn().mockImplementation(() => ({
     setSize: jest.fn(),
     setClearColor: jest.fn(),
     setPixelRatio: jest.fn(),
     render: jest.fn(),
-    domElement: document.createElement('canvas')
+    domElement: document.createElement('canvas'),
   })),
   Vector3: jest.fn().mockImplementation((x = 0, y = 0, z = 0) => ({
     x, y, z,
@@ -40,19 +40,19 @@ const THREE = {
     distanceTo: jest.fn().mockReturnValue(1),
     clone: jest.fn().mockImplementation(function() {
       return new THREE.Vector3(this.x, this.y, this.z);
-    })
+    }),
   })),
   Quaternion: jest.fn().mockImplementation(() => ({
     set: jest.fn(),
     copy: jest.fn(),
-    setFromAxisAngle: jest.fn()
+    setFromAxisAngle: jest.fn(),
   })),
   Euler: jest.fn().mockImplementation(() => ({
-    set: jest.fn()
+    set: jest.fn(),
   })),
   Box3: jest.fn().mockImplementation(() => ({
     setFromObject: jest.fn(),
-    intersectsBox: jest.fn().mockReturnValue(false)
+    intersectsBox: jest.fn().mockReturnValue(false),
   })),
   Mesh: jest.fn().mockImplementation(() => ({
     position: new THREE.Vector3(),
@@ -63,7 +63,7 @@ const THREE = {
     visible: true,
     add: jest.fn(),
     remove: jest.fn(),
-    children: []
+    children: [],
   })),
   Group: jest.fn().mockImplementation(() => ({
     position: new THREE.Vector3(),
@@ -72,7 +72,7 @@ const THREE = {
     add: jest.fn(),
     remove: jest.fn(),
     children: [],
-    userData: {}
+    userData: {},
   })),
   BoxGeometry: jest.fn(),
   SphereGeometry: jest.fn(),
@@ -82,32 +82,32 @@ const THREE = {
   MeshStandardMaterial: jest.fn(),
   MeshPhongMaterial: jest.fn(),
   Color: jest.fn().mockImplementation(() => ({
-    set: jest.fn()
+    set: jest.fn(),
   })),
   DirectionalLight: jest.fn().mockImplementation(() => ({
     position: new THREE.Vector3(),
-    intensity: 1
+    intensity: 1,
   })),
   AmbientLight: jest.fn(),
   PointLight: jest.fn(),
   Clock: jest.fn().mockImplementation(() => ({
     getDelta: jest.fn().mockReturnValue(0.016),
-    getElapsedTime: jest.fn().mockReturnValue(0)
+    getElapsedTime: jest.fn().mockReturnValue(0),
   })),
   Raycaster: jest.fn().mockImplementation(() => ({
     set: jest.fn(),
-    intersectObjects: jest.fn().mockReturnValue([])
+    intersectObjects: jest.fn().mockReturnValue([]),
   })),
   TextureLoader: jest.fn().mockImplementation(() => ({
-    load: jest.fn().mockReturnValue({})
+    load: jest.fn().mockReturnValue({}),
   })),
   Frustum: jest.fn().mockImplementation(() => ({
     setFromProjectionMatrix: jest.fn(),
-    intersectsObject: jest.fn().mockReturnValue(true)
+    intersectsObject: jest.fn().mockReturnValue(true),
   })),
   Matrix4: jest.fn().mockImplementation(() => ({
-    multiplyMatrices: jest.fn().mockReturnThis()
-  }))
+    multiplyMatrices: jest.fn().mockReturnThis(),
+  })),
 };
 
 // Add OrbitControls to THREE.examples.jsm.controls
@@ -116,10 +116,10 @@ THREE.examples = {
     controls: {
       OrbitControls: jest.fn().mockImplementation(() => ({
         update: jest.fn(),
-        enabled: true
-      }))
-    }
-  }
+        enabled: true,
+      })),
+    },
+  },
 };
 
-export default THREE; 
+export default THREE;

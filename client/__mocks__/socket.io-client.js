@@ -5,7 +5,7 @@ const socketMock = {
   disconnect: jest.fn(),
   connect: jest.fn(),
   removeAllListeners: jest.fn(),
-  id: 'test-socket-id'
+  id: 'test-socket-id',
 };
 
-export const io = jest.fn().mockImplementation(() => socketMock); 
+export const io = jest.fn().mockImplementation(() => socketMock);
