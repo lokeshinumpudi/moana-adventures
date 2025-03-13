@@ -1,6 +1,5 @@
 import './style.css'
-import { Game } from './js/game.js'
-import { SocketManager } from './js/SocketManager.js'
+import { Game } from './js/game'
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Create container for the game
