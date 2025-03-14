@@ -343,7 +343,7 @@ const io = new Server(httpServer, {
   cors: {
     origin:
       process.env.NODE_ENV === "production"
-        ? "https://moana-city.vercel.app"
+        ? "https://moana-adventures.vercel.app"
         : ["http://localhost:5173", "http://127.0.0.1:5500", "*"],
     methods: ["GET", "POST"],
   },
