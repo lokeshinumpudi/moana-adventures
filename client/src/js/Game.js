@@ -18,6 +18,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { NotificationManager } from './utils/NotificationManager.js';
 import { DebugOverlay } from './utils/DebugOverlay.js';
 import { PhysicsManager } from './utils/PhysicsManager.js';
+import { SoundManager } from './utils/SoundManager.js';
+import { AudioControls } from './components/AudioControls.js';
 
 export class Game {
   constructor(container) {
@@ -131,6 +133,15 @@ export class Game {
 
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    
+    // Add keyboard shortcut for audio controls (M key)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'm' || e.key === 'M') {
+        if (this.audioControls) {
+          this.audioControls.toggleVisibility();
+        }
+      }
+    });
 
     // Debug settings
     this.debugMode = false;
@@ -149,6 +160,12 @@ export class Game {
 
     // Initialize physics
     this.physicsManager = new PhysicsManager();
+    
+    // Initialize sound manager
+    this.soundManager = new SoundManager(this);
+    
+    // Initialize audio controls
+    this.audioControls = null; // Will be initialized in init()
   }
 
   init() {
@@ -187,6 +204,14 @@ export class Game {
 
           // Initialize HUD
           this.hud = new HUD(this);
+          
+          // Initialize audio controls
+          this.audioControls = new AudioControls(this);
+          document.body.appendChild(this.audioControls.container);
+
+          // Start ocean ambient sounds immediately at a higher volume for idle state
+          this.soundManager.playSound('ocean_waves', { volume: 0.8, loop: true });
+          console.log('Started ocean ambient sound at game initialization');
 
           // Start the game loop
           this.isRunning = true;
@@ -651,11 +676,24 @@ export class Game {
   }
 
   fireProjectile(side) {
+    // Play loading sound when attempting to fire (even if on cooldown)
+    if (this.soundManager) {
+      this.soundManager.playEventSound('cannon_load', { volume: 0.6 });
+    }
+    
     // Delegate to ship's fireProjectile method which handles cooldowns
     const projectileData = this.ship.fireProjectile(side);
 
     // If cooldown hasn't elapsed, ship returns null
     if (!projectileData) return null;
+    
+    // Play firing sound
+    if (this.soundManager) {
+      this.soundManager.playEventSound('cannon_fire', { 
+        volume: 0.8,
+        pitch: 0.9 + Math.random() * 0.2 // Slight random pitch variation
+      });
+    }
 
     // Create and add projectile using the data from ship
     const projectile = this.createProjectile(
@@ -972,6 +1010,11 @@ export class Game {
 
     // Skip if paused
     if (this.isPaused) return;
+    
+    // Update sound system
+    if (this.soundManager) {
+      this.soundManager.update(1/60); // Default to 60fps if no delta time available
+    }
 
     // Calculate delta time
     const now = Date.now();
