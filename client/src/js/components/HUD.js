@@ -351,13 +351,13 @@ export class HUD {
         if (distance > mapRange * 1.2) return;
         
         // Map to radar coordinates (rotate by ship's orientation)
-        const angle = -ourRotation + Math.PI/2; // Add 90 degrees to align with world coordinates
+        const angle = -ourRotation; // Invert rotation to match player movement
         const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
         const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
-        // Convert to screen coordinates (flip Z to match screen coordinates)
+        // Convert to screen coordinates
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (rotatedZ / mapRange) * 50 + 50; // Remove negative sign
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -405,13 +405,13 @@ export class HUD {
         if (distance > mapRange) return;
         
         // Map to radar coordinates (rotate by ship's orientation)
-        const angle = -ourRotation + Math.PI/2; // Add 90 degrees to align with world coordinates
+        const angle = -ourRotation; // Invert rotation to match player movement
         const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
         const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
-        // Convert to screen coordinates (flip Z to match screen coordinates)
+        // Convert to screen coordinates
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (rotatedZ / mapRange) * 50 + 50; // Remove negative sign
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -439,8 +439,8 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Rotate arrow to match ship's orientation (add 90 degrees to align with world)
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation + Math.PI/2}rad)`;
+    // Rotate arrow to match ship's orientation (invert rotation to match movement)
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');
