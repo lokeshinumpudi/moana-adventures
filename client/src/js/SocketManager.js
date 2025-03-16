@@ -51,7 +51,7 @@ export class SocketManager {
 
   init() {
     // Connect to the server
-    this.socket = io(process.env.NODE_ENV === 'production' ? 'https://moana-server.lokeshinumpudi.com' : 'http://localhost:3000');
+    this.socket = io(process.env.NODE_ENV === 'production' ? 'https://moana-socket-3j3fv.ondigitalocean.app' : 'http://localhost:3000');
 
     // Set up socket event listeners
     this.setupSocketListeners();
