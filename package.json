@@ -12,7 +12,7 @@
     "build": "yarn build:client",
     "start:client": "yarn workspace client dev",
     "start:server": "yarn workspace server start",
-    "start": "yarn start:client && yarn start:server",
+    "start": "yarn start:server",
     "clean": "yarn workspaces run clean",
     "test": "yarn workspaces run test"
   },
