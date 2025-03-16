@@ -185,47 +185,79 @@ export class InputManager {
 
   handleTouchStart(event) {
     event.preventDefault();
-    const touch = event.touches[0];
-    this.isTouching = true;
-    this.touchStartPos = { x: touch.clientX, y: touch.clientY };
-    this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
-
-    // Get the touched element
-    const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
-
-    // Handle joystick touch
-    if (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
-      this.touchJoystickActive = true;
-      this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
+    
+    // Handle multiple touches
+    for (let i = 0; i < event.touches.length; i++) {
+      const touch = event.touches[i];
       
-      // Update joystick visuals
-      const rect = this.virtualJoystick.getBoundingClientRect();
-      this.joystickKnob.style.transform = `translate(${touch.clientX - rect.left - rect.width/2}px, ${touch.clientY - rect.top - rect.height/2}px)`;
-    }
-    // Handle cannon button touches
-    else if (touchedElement === this.fireButtons.left) {
-      this.fireLeftCannon();
-      this.fireButtons.left.style.transform = 'scale(0.9)';
-      this.fireButtons.left.style.opacity = '0.8';
-    }
-    else if (touchedElement === this.fireButtons.right) {
-      this.fireRightCannon();
-      this.fireButtons.right.style.transform = 'scale(0.9)';
-      this.fireButtons.right.style.opacity = '0.8';
-    }
-    else if (touchedElement === this.fireButtons.front) {
-      this.fireFrontCannon();
-      this.fireButtons.front.style.transform = 'scale(0.9)';
-      this.fireButtons.front.style.opacity = '0.8';
+      // Get the touched element
+      const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
+      
+      // First touch or joystick touch
+      if (i === 0 || touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
+        if (!this.touchJoystickActive) {
+          this.isTouching = true;
+          this.touchStartPos = { x: touch.clientX, y: touch.clientY };
+          this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
+          
+          // Handle joystick touch
+          if (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
+            this.touchJoystickActive = true;
+            this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
+            
+            // Update joystick visuals
+            const rect = this.virtualJoystick.getBoundingClientRect();
+            this.joystickKnob.style.transform = `translate(${touch.clientX - rect.left - rect.width/2}px, ${touch.clientY - rect.top - rect.height/2}px)`;
+          }
+        }
+      }
+      
+      // Handle cannon button touches (can happen simultaneously with joystick)
+      if (touchedElement === this.fireButtons.left) {
+        this.fireLeftCannon();
+        this.fireButtons.left.style.transform = 'scale(0.9)';
+        this.fireButtons.left.style.opacity = '0.8';
+      }
+      else if (touchedElement === this.fireButtons.right) {
+        this.fireRightCannon();
+        this.fireButtons.right.style.transform = 'scale(0.9)';
+        this.fireButtons.right.style.opacity = '0.8';
+      }
+      else if (touchedElement === this.fireButtons.front) {
+        this.fireFrontCannon();
+        this.fireButtons.front.style.transform = 'scale(0.9)';
+        this.fireButtons.front.style.opacity = '0.8';
+      }
     }
   }
 
   handleTouchMove(event) {
     event.preventDefault();
-    const touch = event.touches[0];
-    this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
-
-    if (this.touchJoystickActive) {
+    
+    // Find the joystick touch if it exists
+    let joystickTouch = null;
+    for (let i = 0; i < event.touches.length; i++) {
+      const touch = event.touches[i];
+      const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
+      
+      // If this touch started on or near the joystick, use it for joystick control
+      if (this.touchJoystickActive) {
+        const dx = touch.clientX - this.touchJoystickCenter.x;
+        const dy = touch.clientY - this.touchJoystickCenter.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // If this touch is close to where the joystick was activated, it's likely the joystick touch
+        if (distance < 150) {
+          joystickTouch = touch;
+          break;
+        }
+      }
+    }
+    
+    // If we found a joystick touch, update the joystick
+    if (joystickTouch && this.touchJoystickActive) {
+      this.touchCurrentPos = { x: joystickTouch.clientX, y: joystickTouch.clientY };
+      
       // Calculate joystick delta
       const dx = this.touchCurrentPos.x - this.touchJoystickCenter.x;
       const dy = this.touchCurrentPos.y - this.touchJoystickCenter.y;
@@ -252,24 +284,29 @@ export class InputManager {
 
   handleTouchEnd(event) {
     event.preventDefault();
-    this.isTouching = false;
-    this.touchJoystickActive = false;
-    this.autoFiringRight = false;
-
-    // Reset joystick visuals
-    this.joystickKnob.style.transform = 'translate(-50%, -50%)';
-
-    // Reset all cannon button visuals
-    Object.values(this.fireButtons).forEach(button => {
-      button.style.transform = '';
-      button.style.opacity = '';
-    });
-
-    // Reset all virtual key states
-    this.keys['ArrowUp'] = false;
-    this.keys['ArrowDown'] = false;
-    this.keys['ArrowLeft'] = false;
-    this.keys['ArrowRight'] = false;
+    
+    // Only reset joystick if no touches remain
+    if (event.touches.length === 0) {
+      this.isTouching = false;
+      this.touchJoystickActive = false;
+      
+      // Reset joystick visuals
+      this.joystickKnob.style.transform = 'translate(-50%, -50%)';
+      
+      // Reset virtual key states
+      this.keys['ArrowUp'] = false;
+      this.keys['ArrowDown'] = false;
+      this.keys['ArrowLeft'] = false;
+      this.keys['ArrowRight'] = false;
+    }
+    
+    // Reset fire button visuals
+    this.fireButtons.left.style.transform = 'scale(1)';
+    this.fireButtons.left.style.opacity = '1';
+    this.fireButtons.right.style.transform = 'scale(1)';
+    this.fireButtons.right.style.opacity = '1';
+    this.fireButtons.front.style.transform = 'scale(1)';
+    this.fireButtons.front.style.opacity = '1';
   }
 
   updateAutoFire() {

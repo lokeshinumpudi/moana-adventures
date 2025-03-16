@@ -283,6 +283,21 @@
   max-width: 350px;
 }
 
+/* Mobile adjustments for notifications */
+@media (hover: none) and (pointer: coarse) {
+  .notification-container {
+    bottom: auto;
+    top: 150px;
+    left: 10px;
+    max-width: 250px;
+  }
+  
+  .notification {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+}
+
 .notification {
   background: rgba(0, 0, 0, 0.8);
   color: white;
@@ -298,4 +313,19 @@
 
 @keyframes slideIn {
   to { opacity: 1; transform: translateX(0); }
+}
+
+/* Player arrow (blue triangle) - this should override any other styles */
+.player-arrow {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  border-left: 8px solid transparent !important;
+  border-right: 8px solid transparent !important;
+  border-bottom: 16px solid #00a8ff !important; /* Bright blue color */
+  transform-origin: center bottom !important;
+  z-index: 10 !important; /* Higher z-index to ensure it's on top */
+  box-shadow: 0 0 10px #00a8ff !important;
+  background-color: transparent !important; /* Ensure no background color */
+  border-radius: 0 !important; /* Ensure no border radius */
 } 

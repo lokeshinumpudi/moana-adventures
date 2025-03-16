@@ -52,6 +52,17 @@ export class HUD {
     if (!this.notificationContainer) {
       console.error('Notification container not found');
     }
+
+    // Initialize minimap
+    this.minimapContainer = document.getElementById('mini-map-container');
+    this.blipsContainer = document.getElementById('blips-container');
+    
+    // Clear any existing content in the blips container
+    if (this.blipsContainer) {
+      while (this.blipsContainer.firstChild) {
+        this.blipsContainer.removeChild(this.blipsContainer.firstChild);
+      }
+    }
   }
 
   update(data = {}) {
@@ -302,9 +313,18 @@ export class HUD {
     
     // ALWAYS add our player indicator first (blue arrow in center)
     const playerIndicator = document.createElement('div');
-    playerIndicator.className = 'player-indicator'; // Blue arrow
+    playerIndicator.className = 'player-indicator player-arrow'; // Blue arrow with specific class
+    playerIndicator.style.position = 'absolute';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
+    playerIndicator.style.width = '0';
+    playerIndicator.style.height = '0';
+    playerIndicator.style.borderLeft = '8px solid transparent';
+    playerIndicator.style.borderRight = '8px solid transparent';
+    playerIndicator.style.borderBottom = '16px solid #00a8ff'; // Bright blue color
+    playerIndicator.style.transformOrigin = 'center bottom';
+    playerIndicator.style.zIndex = '4';
+    playerIndicator.style.boxShadow = '0 0 10px #00a8ff';
     playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
     this.blipsContainer.appendChild(playerIndicator);
 
@@ -314,6 +334,9 @@ export class HUD {
       
       otherPlayers.forEach(player => {
         if (!player?.state?.position) return;
+
+        // Skip if this is our own player (to avoid showing both blue arrow and red dot)
+        if (player.id === this.game.socketManager.socket.id) return;
 
         // Calculate relative position
         const relativeX = player.state.position.x - ourPosition.x;
@@ -332,6 +355,13 @@ export class HUD {
           // Create enemy blip (red dot)
           const enemyBlip = document.createElement('div');
           enemyBlip.className = 'enemy-blip'; // Red dot
+          enemyBlip.style.width = '8px';
+          enemyBlip.style.height = '8px';
+          enemyBlip.style.backgroundColor = '#ff0000'; // Bright red color
+          enemyBlip.style.borderRadius = '50%';
+          enemyBlip.style.transform = 'translate(-50%, -50%)';
+          enemyBlip.style.boxShadow = '0 0 8px #ff0000';
+          enemyBlip.style.zIndex = '3';
           enemyBlip.style.left = `${radarX}%`;
           enemyBlip.style.top = `${radarZ}%`;
           this.blipsContainer.appendChild(enemyBlip);
@@ -361,14 +391,18 @@ export class HUD {
           // Create island marker (green square)
           const islandMarker = document.createElement('div');
           islandMarker.className = 'island-marker'; // Green square
-          islandMarker.style.left = `${radarX}%`;
-          islandMarker.style.top = `${radarZ}%`;
 
           // Scale marker based on island size
           const markerSize = Math.max(6, (island.radius || 10) / 5);
           islandMarker.style.width = `${markerSize}px`;
           islandMarker.style.height = `${markerSize}px`;
-
+          islandMarker.style.backgroundColor = '#8BC34A'; // Green color
+          islandMarker.style.borderRadius = '2px';
+          islandMarker.style.transform = 'translate(-50%, -50%) rotate(45deg)';
+          islandMarker.style.zIndex = '2';
+          islandMarker.style.boxShadow = '0 0 4px #8BC34A';
+          islandMarker.style.left = `${radarX}%`;
+          islandMarker.style.top = `${radarZ}%`;
           this.blipsContainer.appendChild(islandMarker);
         }
       });
