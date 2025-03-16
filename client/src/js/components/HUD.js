@@ -288,93 +288,89 @@ export class HUD {
       this.blipsContainer.appendChild(background);
     }
 
-    const minimapRect = this.minimapContainer.getBoundingClientRect();
-    const mapSize = Math.min(minimapRect.width, minimapRect.height);
     const mapRange = 200; // World units visible on minimap
 
-    // Add centered radar sweep effect
+    // Add radar sweep effect
     const sweep = document.createElement('div');
     sweep.className = 'radar-sweep';
-    sweep.style.transformOrigin = 'center center';
     this.blipsContainer.appendChild(sweep);
 
-    const playerPos = this.game.ship.mesh.position;
-
-    // Add player direction indicator (centered, blue arrow)
+    // Get our ship's position and rotation
+    const ourShip = this.game.ship.mesh;
+    const ourPosition = ourShip.position;
+    const ourRotation = ourShip.rotation.y;
+    
+    // ALWAYS add our player indicator first (blue arrow in center)
     const playerIndicator = document.createElement('div');
-    playerIndicator.className = 'player-indicator';
+    playerIndicator.className = 'player-indicator'; // Blue arrow
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-this.game.ship.mesh.rotation.y}rad)`;
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
     this.blipsContainer.appendChild(playerIndicator);
 
-    // Add other players as red blips
+    // Add other players as red dots
     if (this.game.socketManager) {
       const otherPlayers = Array.from(this.game.socketManager.otherPlayers.values());
       
-      otherPlayers.forEach((player) => {
-        if (!player || !player.state || !player.state.position) {
-          return;
-        }
+      otherPlayers.forEach(player => {
+        if (!player?.state?.position) return;
 
-        // Calculate relative position from player's perspective
-        const relativePos = {
-          x: player.state.position.x - playerPos.x,
-          z: player.state.position.z - playerPos.z
-        };
-
+        // Calculate relative position
+        const relativeX = player.state.position.x - ourPosition.x;
+        const relativeZ = player.state.position.z - ourPosition.z;
+        
         // Check if in range
-        if (Math.abs(relativePos.x) > mapRange || Math.abs(relativePos.z) > mapRange) {
-          return; // Skip if out of range
+        const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
+        if (distance > mapRange) return;
+        
+        // Map to radar coordinates
+        const radarX = (relativeX / mapRange) * 50 + 50;
+        const radarZ = (relativeZ / mapRange) * 50 + 50;
+        
+        // Only show if within radar bounds
+        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
+          // Create enemy blip (red dot)
+          const enemyBlip = document.createElement('div');
+          enemyBlip.className = 'enemy-blip'; // Red dot
+          enemyBlip.style.left = `${radarX}%`;
+          enemyBlip.style.top = `${radarZ}%`;
+          this.blipsContainer.appendChild(enemyBlip);
         }
-
-        // Calculate position on minimap
-        const mapX = (relativePos.x / mapRange) * 50 + 50;
-        const mapZ = (relativePos.z / mapRange) * 50 + 50;
-
-        // Create blip for other player (red dot)
-        const enemyBlip = document.createElement('div');
-        enemyBlip.className = 'enemy-blip';
-        enemyBlip.style.left = `${mapX}%`;
-        enemyBlip.style.top = `${mapZ}%`;
-
-        this.blipsContainer.appendChild(enemyBlip);
       });
     }
 
     // Add islands
     if (this.game.islands) {
       this.game.islands.forEach(island => {
-        if (!island.mesh || !island.mesh.position) return;
+        if (!island.mesh?.position) return;
 
-        const islandPos = island.mesh.position;
-        const relativePos = {
-          x: islandPos.x - playerPos.x,
-          z: islandPos.z - playerPos.z
-        };
-
+        // Calculate relative position
+        const relativeX = island.mesh.position.x - ourPosition.x;
+        const relativeZ = island.mesh.position.z - ourPosition.z;
+        
         // Check if in range
-        const islandRange = mapRange * 1.2;
-        if (Math.abs(relativePos.x) > islandRange || Math.abs(relativePos.z) > islandRange) {
-          return;
+        const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
+        if (distance > mapRange * 1.2) return;
+        
+        // Map to radar coordinates
+        const radarX = (relativeX / mapRange) * 50 + 50;
+        const radarZ = (relativeZ / mapRange) * 50 + 50;
+        
+        // Only show if within radar bounds
+        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
+          // Create island marker (green square)
+          const islandMarker = document.createElement('div');
+          islandMarker.className = 'island-marker'; // Green square
+          islandMarker.style.left = `${radarX}%`;
+          islandMarker.style.top = `${radarZ}%`;
+
+          // Scale marker based on island size
+          const markerSize = Math.max(6, (island.radius || 10) / 5);
+          islandMarker.style.width = `${markerSize}px`;
+          islandMarker.style.height = `${markerSize}px`;
+
+          this.blipsContainer.appendChild(islandMarker);
         }
-
-        // Calculate position on minimap
-        const mapX = (relativePos.x / mapRange) * 50 + 50;
-        const mapZ = (relativePos.z / mapRange) * 50 + 50;
-
-        // Create marker for island
-        const islandMarker = document.createElement('div');
-        islandMarker.className = 'island-marker';
-        islandMarker.style.left = `${mapX}%`;
-        islandMarker.style.top = `${mapZ}%`;
-
-        // Scale marker based on island size
-        const markerSize = Math.max(6, (island.radius || 10) / 5);
-        islandMarker.style.width = `${markerSize}px`;
-        islandMarker.style.height = `${markerSize}px`;
-
-        this.blipsContainer.appendChild(islandMarker);
       });
     }
   }

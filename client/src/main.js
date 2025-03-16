@@ -1,4 +1,5 @@
 import './style.css';
+import './ui/hud.css'; // Import HUD CSS after main CSS so it takes precedence
 import { Game } from './js/Game';
 
 document.addEventListener('DOMContentLoaded', async () => {
