@@ -6,6 +6,23 @@ export class InputManager {
     this.leftMouseDown = false;
     this.rightMouseDown = false;
 
+    // Touch state
+    this.isTouching = false;
+    this.touchStartPos = { x: 0, y: 0 };
+    this.touchCurrentPos = { x: 0, y: 0 };
+    this.touchJoystickCenter = { x: 0, y: 0 };
+    this.touchJoystickActive = false;
+
+    // Touch UI elements
+    this.touchControls = null;
+    this.virtualJoystick = null;
+    this.joystickKnob = null;
+    this.fireButtons = {
+      left: null,
+      right: null,
+      front: null
+    };
+
     // Key mappings
     this.FORWARD_KEYS = ['w', 'ArrowUp'];
     this.BACKWARD_KEYS = ['s', 'ArrowDown'];
@@ -25,6 +42,7 @@ export class InputManager {
     this.autoFiringFront = false;
 
     this.init();
+    this.createTouchControls();
   }
 
   init() {
@@ -36,8 +54,57 @@ export class InputManager {
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('contextmenu', (e) => e.preventDefault());
 
+    // Add touch event listeners
+    window.addEventListener('touchstart', this.handleTouchStart.bind(this));
+    window.addEventListener('touchmove', this.handleTouchMove.bind(this));
+    window.addEventListener('touchend', this.handleTouchEnd.bind(this));
+
     // We no longer need to modify the game.update method
     // The Game class will call our update method directly
+  }
+
+  createTouchControls() {
+    // Create touch controls container
+    this.touchControls = document.createElement('div');
+    this.touchControls.className = 'touch-controls';
+
+    // Create virtual joystick
+    this.virtualJoystick = document.createElement('div');
+    this.virtualJoystick.className = 'virtual-joystick';
+
+    // Create joystick knob
+    this.joystickKnob = document.createElement('div');
+    this.joystickKnob.className = 'joystick-knob';
+    this.virtualJoystick.appendChild(this.joystickKnob);
+
+    // Create fire controls container
+    const fireControls = document.createElement('div');
+    fireControls.className = 'fire-controls';
+
+    // Create cannon buttons
+    this.fireButtons.left = document.createElement('div');
+    this.fireButtons.left.className = 'fire-button left-cannon';
+    this.fireButtons.left.textContent = 'Left';
+
+    this.fireButtons.front = document.createElement('div');
+    this.fireButtons.front.className = 'fire-button front-cannon';
+    this.fireButtons.front.textContent = 'Front';
+
+    this.fireButtons.right = document.createElement('div');
+    this.fireButtons.right.className = 'fire-button right-cannon';
+    this.fireButtons.right.textContent = 'Right';
+
+    // Add buttons to fire controls
+    fireControls.appendChild(this.fireButtons.left);
+    fireControls.appendChild(this.fireButtons.front);
+    fireControls.appendChild(this.fireButtons.right);
+
+    // Add elements to container
+    this.touchControls.appendChild(this.virtualJoystick);
+    this.touchControls.appendChild(fireControls);
+
+    // Add container to document
+    document.body.appendChild(this.touchControls);
   }
 
   handleKeyDown(event) {
@@ -114,6 +181,95 @@ export class InputManager {
     if (this.game.cameraManager && this.game.cameraManager.isOrbitMode) {
       this.game.cameraManager.handleMouseMove(event);
     }
+  }
+
+  handleTouchStart(event) {
+    event.preventDefault();
+    const touch = event.touches[0];
+    this.isTouching = true;
+    this.touchStartPos = { x: touch.clientX, y: touch.clientY };
+    this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
+
+    // Get the touched element
+    const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
+
+    // Handle joystick touch
+    if (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
+      this.touchJoystickActive = true;
+      this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
+      
+      // Update joystick visuals
+      const rect = this.virtualJoystick.getBoundingClientRect();
+      this.joystickKnob.style.transform = `translate(${touch.clientX - rect.left - rect.width/2}px, ${touch.clientY - rect.top - rect.height/2}px)`;
+    }
+    // Handle cannon button touches
+    else if (touchedElement === this.fireButtons.left) {
+      this.fireLeftCannon();
+      this.fireButtons.left.style.transform = 'scale(0.9)';
+      this.fireButtons.left.style.opacity = '0.8';
+    }
+    else if (touchedElement === this.fireButtons.right) {
+      this.fireRightCannon();
+      this.fireButtons.right.style.transform = 'scale(0.9)';
+      this.fireButtons.right.style.opacity = '0.8';
+    }
+    else if (touchedElement === this.fireButtons.front) {
+      this.fireFrontCannon();
+      this.fireButtons.front.style.transform = 'scale(0.9)';
+      this.fireButtons.front.style.opacity = '0.8';
+    }
+  }
+
+  handleTouchMove(event) {
+    event.preventDefault();
+    const touch = event.touches[0];
+    this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
+
+    if (this.touchJoystickActive) {
+      // Calculate joystick delta
+      const dx = this.touchCurrentPos.x - this.touchJoystickCenter.x;
+      const dy = this.touchCurrentPos.y - this.touchJoystickCenter.y;
+      
+      // Limit joystick movement radius
+      const maxRadius = 40;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const scale = distance > maxRadius ? maxRadius / distance : 1;
+      
+      // Update joystick knob position
+      const rect = this.virtualJoystick.getBoundingClientRect();
+      const knobX = dx * scale;
+      const knobY = dy * scale;
+      this.joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+      
+      // Update virtual key states based on joystick position
+      const deadzone = 20;
+      this.keys['ArrowUp'] = dy < -deadzone;
+      this.keys['ArrowDown'] = dy > deadzone;
+      this.keys['ArrowLeft'] = dx < -deadzone;
+      this.keys['ArrowRight'] = dx > deadzone;
+    }
+  }
+
+  handleTouchEnd(event) {
+    event.preventDefault();
+    this.isTouching = false;
+    this.touchJoystickActive = false;
+    this.autoFiringRight = false;
+
+    // Reset joystick visuals
+    this.joystickKnob.style.transform = 'translate(-50%, -50%)';
+
+    // Reset all cannon button visuals
+    Object.values(this.fireButtons).forEach(button => {
+      button.style.transform = '';
+      button.style.opacity = '';
+    });
+
+    // Reset all virtual key states
+    this.keys['ArrowUp'] = false;
+    this.keys['ArrowDown'] = false;
+    this.keys['ArrowLeft'] = false;
+    this.keys['ArrowRight'] = false;
   }
 
   updateAutoFire() {

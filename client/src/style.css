@@ -477,3 +477,115 @@ body {
   cursor: pointer;
   z-index: 1001;
 }
+
+/* Mobile touch controls */
+.touch-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  pointer-events: none;
+  z-index: 1000;
+  display: none; /* Hidden by default, shown on mobile */
+}
+
+.virtual-joystick {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  pointer-events: auto;
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.fire-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 15px;
+  pointer-events: auto;
+}
+
+.fire-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 0, 0, 0.3);
+  border: 2px solid rgba(255, 0, 0, 0.4);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.fire-button.left-cannon {
+  background: rgba(255, 165, 0, 0.3);
+  border-color: rgba(255, 165, 0, 0.4);
+}
+
+.fire-button.right-cannon {
+  background: rgba(0, 255, 255, 0.3);
+  border-color: rgba(0, 255, 255, 0.4);
+}
+
+.fire-button.front-cannon {
+  background: rgba(255, 0, 0, 0.3);
+  border-color: rgba(255, 0, 0, 0.4);
+}
+
+/* Mobile-optimized HUD */
+@media (max-width: 768px) {
+  .touch-controls {
+    display: block;
+  }
+
+  #mini-map-container {
+    top: 10px;
+    right: 10px;
+    width: 100px;
+    height: 100px;
+  }
+
+  #hud {
+    top: 10px;
+    left: 10px;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border-radius: 8px;
+  }
+
+  #character-controls {
+    display: none; /* Hide keyboard controls on mobile */
+  }
+
+  #debug-overlay {
+    display: none; /* Hide debug overlay on mobile */
+  }
+
+  .notification {
+    bottom: 220px; /* Move notifications above touch controls */
+  }
+}
