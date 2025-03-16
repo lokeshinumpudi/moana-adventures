@@ -394,13 +394,13 @@ export class HUD {
         
         // Map to radar coordinates (rotate by ship's orientation)
         // Use consistent coordinate system where forward is -Z (up on screen)
-        const angle = ourRotation;
-        const rotatedX = relativeX * Math.cos(angle) + relativeZ * Math.sin(angle);
-        const rotatedZ = -relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        const angle = -ourRotation;
+        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
+        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
         // Convert to screen coordinates (forward is up)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -449,13 +449,13 @@ export class HUD {
         
         // Map to radar coordinates (rotate by ship's orientation)
         // Use consistent coordinate system where forward is -Z (up on screen)
-        const angle = ourRotation;
-        const rotatedX = relativeX * Math.cos(angle) + relativeZ * Math.sin(angle);
-        const rotatedZ = -relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        const angle = -ourRotation;
+        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
+        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
         // Convert to screen coordinates (forward is up)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -483,10 +483,9 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // The arrow points up by default (0 rad), so we need to rotate it to match the ship's heading
-    // In Three.js, 0 rad is east (+X), but we want 0 rad to be north (-Z)
-    const arrowRotation = ourRotation - Math.PI; // Adjust rotation to match ship's heading
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${arrowRotation}rad)`;
+    // Fix the rotation to match the ship's actual heading
+    // The ship is facing forward when rotation.y = 0, which should point up on the minimap
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');
