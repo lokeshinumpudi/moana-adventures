@@ -184,6 +184,9 @@ export class Game {
         // Set up input manager first
         this.inputManager = new InputManager(this);
 
+        // Initialize debug overlay
+        this.debugOverlay = new DebugOverlay(this);
+
         // Set up socket manager for multiplayer
         this.socketManager = new SocketManager(this);
 
@@ -1047,8 +1050,10 @@ export class Game {
     // Update game state
     this.update(delta);
 
-    // Update weather
-    this.weather.update();
+    // Update weather system
+    if (this.weather) {
+      this.weather.update();
+    }
 
     // Render scene
     this.render();
@@ -1218,6 +1223,11 @@ export class Game {
     // Update physics
     if (this.physicsManager) {
       this.physicsManager.update(delta);
+    }
+
+    // Update debug overlay
+    if (this.debugOverlay) {
+      this.debugOverlay.update(now, delta);
     }
   }
 
@@ -1625,7 +1635,38 @@ export class Game {
   }
 
   updateDebugInfo(time, delta) {
-    this.debugOverlay.update(time, delta);
+    if (!this.debug) return;
+
+    const debugOverlay = document.getElementById('debug-overlay');
+    if (!debugOverlay) return;
+
+    // Update FPS
+    const fpsElement = debugOverlay.querySelector('.debug-fps');
+    if (fpsElement) {
+      fpsElement.textContent = `FPS: ${Math.round(this.fps)}`;
+    }
+
+    // Update memory usage
+    const memoryElement = debugOverlay.querySelector('.debug-memory');
+    if (memoryElement && window.performance && window.performance.memory) {
+      const memory = window.performance.memory;
+      const usedMemory = Math.round(memory.usedJSHeapSize / (1024 * 1024));
+      const totalMemory = Math.round(memory.jsHeapSizeLimit / (1024 * 1024));
+      memoryElement.textContent = `Memory: ${usedMemory}MB / ${totalMemory}MB`;
+    }
+
+    // Update ping
+    const pingElement = debugOverlay.querySelector('.debug-ping');
+    if (pingElement && this.socketManager) {
+      pingElement.textContent = `Ping: ${this.socketManager.lastPing}ms`;
+    }
+
+    // Update player count
+    const playersElement = debugOverlay.querySelector('.debug-players');
+    if (playersElement && this.socketManager) {
+      const playerCount = this.socketManager.otherPlayers.size + 1; // +1 for local player
+      playersElement.textContent = `Players: ${playerCount}`;
+    }
   }
 
   createOtherPlayerShip(playerData) {
@@ -2108,5 +2149,14 @@ export class Game {
 
     // Create world components from server data
     this.createWorldFromData();
+  }
+
+  toggleDebug() {
+    this.debug = !this.debug;
+    
+    if (this.debugOverlay) {
+      this.debugOverlay.debugMode = this.debug;
+      this.debugOverlay.debugContainer.style.display = this.debug ? 'block' : 'none';
+    }
   }
 }

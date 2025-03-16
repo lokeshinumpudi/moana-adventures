@@ -12,6 +12,10 @@ export class SocketManager {
     this.lastUpdateTime = 0;
     this.updateInterval = 50; // 20 times per second
 
+    // Time synchronization
+    this.lastTimeSync = 0;
+    this.timeSyncInterval = 60000; // Sync time every minute
+
     // Performance optimization settings
     this.interpolationFactor = 0.1; // Lower = smoother but more latency
     this.positionThreshold = 0.1; // Increased threshold to reduce network traffic
@@ -72,14 +76,34 @@ export class SocketManager {
         });
       }
 
+      // Request server time
+      this.socket.emit('time:request');
+
       // Start ping tracking
       this.pingStartTime = Date.now();
       this.socket.emit('ping');
     });
 
+    // Handle server time response
+    this.socket.on('time:response', (data) => {
+      if (this.game.weather) {
+        // Calculate time of day based on server time
+        const serverTime = data.serverTime;
+        const dayDuration = this.game.weather.dayDuration * 1000; // Convert to milliseconds
+        const timeOfDay = (serverTime % dayDuration) / dayDuration;
+        
+        console.log(`Received server time: ${new Date(serverTime).toISOString()}, timeOfDay: ${timeOfDay}`);
+        
+        // Update weather system with server time
+        this.game.weather.setTimeOfDay(timeOfDay);
+        this.game.weather.lastUpdate = Date.now();
+      }
+    });
+
     // Add ping handler
     this.socket.on('pong', () => {
       this.lastPing = Date.now() - this.pingStartTime;
+      console.log(`Current ping: ${this.lastPing}ms`);
 
       // Schedule next ping
       setTimeout(() => {
@@ -273,6 +297,12 @@ export class SocketManager {
     const now = Date.now();
     const hasActiveProjectiles = this.game.projectiles.length > 0;
     const updateInterval = hasActiveProjectiles ? this.projectileUpdateInterval : this.updateInterval;
+
+    // Periodically sync time with server
+    if (now - this.lastTimeSync > this.timeSyncInterval) {
+      this.socket.emit('time:request');
+      this.lastTimeSync = now;
+    }
 
     // Only send updates at the specified interval
     if (now - this.lastUpdateTime < updateInterval) return;

@@ -32,6 +32,9 @@ export class HUD {
     // Notification container
     this.notificationContainer = document.querySelector('.notification-container');
 
+    // Create time of day display
+    this.createTimeDisplay();
+
     // Validate that required elements exist
     if (!this.container) {
       console.error('HUD container not found');
@@ -63,6 +66,29 @@ export class HUD {
         this.blipsContainer.removeChild(this.blipsContainer.firstChild);
       }
     }
+  }
+
+  createTimeDisplay() {
+    // Create time display container
+    this.timeDisplay = document.createElement('div');
+    this.timeDisplay.className = 'time-display';
+    
+    // Create clock element
+    this.timeClock = document.createElement('div');
+    this.timeClock.className = 'time-clock';
+    this.timeClock.textContent = '00:00';
+    
+    // Create period element
+    this.timePeriod = document.createElement('div');
+    this.timePeriod.className = 'time-period';
+    this.timePeriod.textContent = 'Dawn';
+    
+    // Assemble elements
+    this.timeDisplay.appendChild(this.timeClock);
+    this.timeDisplay.appendChild(this.timePeriod);
+    
+    // Add to container
+    this.container.appendChild(this.timeDisplay);
   }
 
   update(data = {}) {
@@ -101,6 +127,22 @@ export class HUD {
     // Update players online
     if (data.playersOnline !== undefined && this.onlineCount) {
       this.onlineCount.textContent = `Players Online: ${data.playersOnline}`;
+    }
+
+    // Update time of day display if weather system exists
+    if (this.game.weather) {
+      this.updateTimeDisplay();
+    }
+
+    // Update ping if debug is enabled
+    if (this.game.debug && this.game.socketManager) {
+      const debugElement = document.getElementById('debug-overlay');
+      if (debugElement) {
+        const pingElement = debugElement.querySelector('.debug-ping');
+        if (pingElement) {
+          pingElement.textContent = `Ping: ${this.game.socketManager.lastPing}ms`;
+        }
+      }
     }
 
     // Update powerup timers
@@ -351,13 +393,14 @@ export class HUD {
         if (distance > mapRange * 1.2) return;
         
         // Map to radar coordinates (rotate by ship's orientation)
-        const angle = -ourRotation; // Invert rotation to match player movement
-        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
-        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        // Use consistent coordinate system where forward is -Z (up on screen)
+        const angle = ourRotation;
+        const rotatedX = relativeX * Math.cos(angle) + relativeZ * Math.sin(angle);
+        const rotatedZ = -relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
-        // Convert to screen coordinates
+        // Convert to screen coordinates (forward is up)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -405,13 +448,14 @@ export class HUD {
         if (distance > mapRange) return;
         
         // Map to radar coordinates (rotate by ship's orientation)
-        const angle = -ourRotation; // Invert rotation to match player movement
-        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
-        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        // Use consistent coordinate system where forward is -Z (up on screen)
+        const angle = ourRotation;
+        const rotatedX = relativeX * Math.cos(angle) + relativeZ * Math.sin(angle);
+        const rotatedZ = -relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
         
-        // Convert to screen coordinates
+        // Convert to screen coordinates (forward is up)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (rotatedZ / mapRange) * 50 + 50;
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -439,8 +483,10 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Rotate arrow to match ship's orientation (invert rotation to match movement)
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
+    // The arrow points up by default (0 rad), so we need to rotate it to match the ship's heading
+    // In Three.js, 0 rad is east (+X), but we want 0 rad to be north (-Z)
+    const arrowRotation = ourRotation - Math.PI; // Adjust rotation to match ship's heading
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${arrowRotation}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');
@@ -459,5 +505,43 @@ export class HUD {
       y: targetPos.y - playerPos.y,
       z: targetPos.z - playerPos.z,
     };
+  }
+
+  updateTimeDisplay() {
+    if (!this.timeClock || !this.timePeriod || !this.game.weather) return;
+    
+    // Get formatted time string
+    const timeString = this.game.weather.getTimeString();
+    const periodName = this.game.weather.getTimeOfDayName();
+    
+    // Update display
+    this.timeClock.textContent = timeString;
+    this.timePeriod.textContent = periodName;
+    
+    // Update colors based on time of day
+    const hour = this.game.weather.timeOfDay * 24;
+    
+    if (hour >= 5 && hour < 8) {
+      // Dawn - orange
+      this.timeDisplay.style.background = 'rgba(255, 153, 51, 0.6)';
+      this.timeDisplay.style.borderLeft = '3px solid #ff9933';
+    } else if (hour >= 8 && hour < 17) {
+      // Day - blue
+      this.timeDisplay.style.background = 'rgba(25, 42, 86, 0.6)';
+      this.timeDisplay.style.borderLeft = '3px solid #5bc0de';
+    } else if (hour >= 17 && hour < 20) {
+      // Sunset - orange/red
+      this.timeDisplay.style.background = 'rgba(204, 51, 0, 0.6)';
+      this.timeDisplay.style.borderLeft = '3px solid #ff6600';
+    } else {
+      // Night - dark blue
+      this.timeDisplay.style.background = 'rgba(10, 26, 42, 0.8)';
+      this.timeDisplay.style.borderLeft = '3px solid #3366cc';
+    }
+    
+    // Add server sync indicator if using server time
+    if (this.game.weather.useServerTime) {
+      this.timeClock.textContent += ' ⟳';
+    }
   }
 }

@@ -2,6 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const TimeManager = require('./src/timeManager');
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,9 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST"]
   }
 });
+
+// Initialize TimeManager
+const timeManager = new TimeManager(io);
 
 // Store connected players
 const players = new Map();

@@ -437,4 +437,49 @@
   width: 80%;
   top: 50%;
   left: 10%;
+}
+
+/* Time of day display */
+.time-display {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1000;
+}
+
+.time-clock {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.time-period {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* Mobile adjustments for time display */
+@media (hover: none) and (pointer: coarse) {
+  .time-display {
+    top: 10px;
+    right: 140px; /* Position to not overlap with minimap */
+    padding: 5px 8px;
+    font-size: 14px;
+  }
+  
+  .time-clock {
+    font-size: 16px;
+  }
+  
+  .time-period {
+    font-size: 12px;
+  }
 } 
