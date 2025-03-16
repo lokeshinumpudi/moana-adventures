@@ -118,13 +118,13 @@ export class Ship {
 
     // Left cannon
     this.leftCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
-    this.leftCannon.position.set(-1.7, 0.5, 0);
+    this.leftCannon.position.set(1.7, 0.5, 0);
     this.leftCannon.castShadow = true;
     this.mesh.add(this.leftCannon);
 
     // Right cannon
     this.rightCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
-    this.rightCannon.position.set(1.7, 0.5, 0);
+    this.rightCannon.position.set(-1.7, 0.5, 0);
     this.rightCannon.castShadow = true;
     this.mesh.add(this.rightCannon);
 
@@ -132,7 +132,7 @@ export class Ship {
     const frontCannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
     frontCannonGeometry.rotateX(Math.PI / 2);
     this.frontCannon = new THREE.Mesh(frontCannonGeometry, cannonMaterial);
-    this.frontCannon.position.set(0, 0.5, -3.5);
+    this.frontCannon.position.set(0, 0.5, 2);
     this.frontCannon.castShadow = true;
     this.mesh.add(this.frontCannon);
   }
@@ -255,22 +255,33 @@ export class Ship {
 
     if (side === 'left') {
       position = this.getLeftCannonPosition();
-      direction = new THREE.Vector3(-1, 0, 0);
-      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
-    } else if (side === 'right') {
-      position = this.getRightCannonPosition();
       direction = new THREE.Vector3(1, 0, 0);
       direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      direction.multiplyScalar(this.weaponSettings.cannon.speed);
+    } else if (side === 'right') {
+      position = this.getRightCannonPosition();
+      direction = new THREE.Vector3(-1, 0, 0);
+      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      direction.multiplyScalar(this.weaponSettings.cannon.speed);
     } else if (side === 'front') {
       position = this.getFrontCannonPosition();
-      direction = new THREE.Vector3(0, 0, -1);
+      direction = new THREE.Vector3(0, 0, 1);
       direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      direction.multiplyScalar(this.weaponSettings.cannon.speed);
+      
+      // Add ship's forward momentum to front projectiles
+      if (this.speed !== 0) {
+        const shipVelocity = new THREE.Vector3(0, 0, this.speed);
+        shipVelocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+        direction.add(shipVelocity);
+      }
     }
 
     // Return position and direction data for Game to use
     return {
       position,
       direction,
+      hasShipMomentum: side === 'front' && this.speed !== 0
     };
   }
 
@@ -301,11 +312,11 @@ export class Ship {
 
     if (side === 'left') {
       position = this.getLeftCannonPosition();
-      direction = new THREE.Vector3(-1, 0, 0);
+      direction = new THREE.Vector3(1, 0, 0);
       direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     } else if (side === 'right') {
       position = this.getRightCannonPosition();
-      direction = new THREE.Vector3(1, 0, 0);
+      direction = new THREE.Vector3(-1, 0, 0);
       direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
     } else if (side === 'front') {
       position = this.getFrontCannonPosition();

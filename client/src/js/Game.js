@@ -661,9 +661,14 @@ export class Game {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.copy(position);
 
+    // If direction is a Vector3, use it directly, otherwise multiply by speed
+    const velocity = direction instanceof THREE.Vector3 ? 
+      direction.clone() : 
+      direction.clone().multiplyScalar(projectileSettings.speed);
+
     return {
       mesh,
-      velocity: direction.clone().multiplyScalar(projectileSettings.speed),
+      velocity,
       creationTime: Date.now(),
       damage: projectileSettings.damage,
       isMachineGun,
@@ -728,6 +733,7 @@ export class Game {
         position: projectile.mesh.position.clone(),
         velocity: projectile.velocity.clone(),
         type: 'cannon',
+        hasShipMomentum: projectileData.hasShipMomentum
       };
       this.socketManager.sendProjectileFired(projectileNetData);
     }

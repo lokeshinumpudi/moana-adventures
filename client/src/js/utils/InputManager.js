@@ -54,10 +54,10 @@ export class InputManager {
     window.addEventListener('mousemove', this.handleMouseMove.bind(this));
     window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Add touch event listeners
-    window.addEventListener('touchstart', this.handleTouchStart.bind(this));
-    window.addEventListener('touchmove', this.handleTouchMove.bind(this));
-    window.addEventListener('touchend', this.handleTouchEnd.bind(this));
+    // Add touch event listeners with passive: false
+    window.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
+    window.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+    window.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: false });
 
     // We no longer need to modify the game.update method
     // The Game class will call our update method directly
@@ -111,9 +111,9 @@ export class InputManager {
     this.keys[event.key] = true;
 
     // Handle cannon fire on key press, not continuously
-    if (this.RIGHT_CANNON_KEYS.includes(event.key)) {
+    if (this.LEFT_CANNON_KEYS.includes(event.key)) {
       this.fireLeftCannon();
-    } else if (this.LEFT_CANNON_KEYS.includes(event.key)) {
+    } else if (this.RIGHT_CANNON_KEYS.includes(event.key)) {
       this.fireRightCannon();
     } else if (this.FRONT_CANNON_KEY.includes(event.key)) {
       this.fireFrontCannon();

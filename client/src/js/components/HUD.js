@@ -274,89 +274,94 @@ export class HUD {
   }
 
   updateMinimap() {
+    if (!this.game || !this.game.ship || !this.blipsContainer) return;
+
     // Clear existing blips
     while (this.blipsContainer.firstChild) {
       this.blipsContainer.removeChild(this.blipsContainer.firstChild);
     }
 
+    // Add minimap background if it doesn't exist
+    if (!this.blipsContainer.querySelector('.minimap-background')) {
+      const background = document.createElement('div');
+      background.className = 'minimap-background';
+      this.blipsContainer.appendChild(background);
+    }
+
+    const minimapRect = this.minimapContainer.getBoundingClientRect();
+    const mapSize = Math.min(minimapRect.width, minimapRect.height);
+    const mapRange = 200; // World units visible on minimap
+
+    // Add centered radar sweep effect
+    const sweep = document.createElement('div');
+    sweep.className = 'radar-sweep';
+    sweep.style.transformOrigin = 'center center';
+    this.blipsContainer.appendChild(sweep);
+
     const playerPos = this.game.ship.mesh.position;
 
-    // Add player blip
-    const playerBlip = document.createElement('div');
-    playerBlip.className = 'player-blip';
+    // Add player direction indicator (centered, blue arrow)
+    const playerIndicator = document.createElement('div');
+    playerIndicator.className = 'player-indicator';
+    playerIndicator.style.left = '50%';
+    playerIndicator.style.top = '50%';
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-this.game.ship.mesh.rotation.y}rad)`;
+    this.blipsContainer.appendChild(playerIndicator);
 
-    // Center the player on the minimap
-    playerBlip.style.left = '50%';
-    playerBlip.style.top = '50%';
+    // Add other players as red blips
+    if (this.game.socketManager) {
+      const otherPlayers = Array.from(this.game.socketManager.otherPlayers.values());
+      
+      otherPlayers.forEach((player) => {
+        if (!player || !player.state || !player.state.position) {
+          return;
+        }
 
-    // Add player direction indicator
-    const playerDirection = document.createElement('div');
-    playerDirection.className = 'player-direction';
-
-    // Rotate the direction indicator to match player rotation
-    playerDirection.style.transform = `rotate(${-this.game.ship.mesh.rotation.y}rad)`;
-
-    playerBlip.appendChild(playerDirection);
-    this.blipsContainer.appendChild(playerBlip);
-
-    // Add other players
-    if (this.game.socketManager && this.game.socketManager.otherPlayers) {
-      this.game.socketManager.otherPlayers.forEach((player) => {
-        const state = player.state || player;
-        if (!state.position) return;
-
-        // Calculate position relative to player
-        const relativePos = this.calculateRelativePosition(state.position, playerPos);
+        // Calculate relative position from player's perspective
+        const relativePos = {
+          x: player.state.position.x - playerPos.x,
+          z: player.state.position.z - playerPos.z
+        };
 
         // Check if in range
-        const mapRange = 100; // World units visible on minimap
         if (Math.abs(relativePos.x) > mapRange || Math.abs(relativePos.z) > mapRange) {
           return; // Skip if out of range
         }
 
-        // Calculate position on minimap (convert world coordinates to minimap coordinates)
-        const mapSize = 100; // Size of minimap in pixels
-        const mapX = (relativePos.x / mapRange) * (mapSize / 2) + 50; // Convert to percentage (50% is center)
-        const mapZ = (relativePos.z / mapRange) * (mapSize / 2) + 50; // Convert to percentage (50% is center)
+        // Calculate position on minimap
+        const mapX = (relativePos.x / mapRange) * 50 + 50;
+        const mapZ = (relativePos.z / mapRange) * 50 + 50;
 
-        // Create blip for other player
+        // Create blip for other player (red dot)
         const enemyBlip = document.createElement('div');
         enemyBlip.className = 'enemy-blip';
         enemyBlip.style.left = `${mapX}%`;
         enemyBlip.style.top = `${mapZ}%`;
 
-        // Add direction indicator for enemy
-        const enemyDirection = document.createElement('div');
-        enemyDirection.className = 'enemy-direction';
-
-        // Rotate to match enemy rotation
-        if (state.rotation) {
-          enemyDirection.style.transform = `rotate(${-state.rotation.y}rad)`;
-        }
-
-        enemyBlip.appendChild(enemyDirection);
         this.blipsContainer.appendChild(enemyBlip);
       });
     }
 
-    // Add islands if available
+    // Add islands
     if (this.game.islands) {
       this.game.islands.forEach(island => {
-        const islandPos = island.mesh.position;
+        if (!island.mesh || !island.mesh.position) return;
 
-        // Calculate position relative to player
-        const relativePos = this.calculateRelativePosition(islandPos, playerPos);
+        const islandPos = island.mesh.position;
+        const relativePos = {
+          x: islandPos.x - playerPos.x,
+          z: islandPos.z - playerPos.z
+        };
 
         // Check if in range
-        const mapRange = 150; // Larger range for islands
-        if (Math.abs(relativePos.x) > mapRange || Math.abs(relativePos.z) > mapRange) {
-          return; // Skip if out of range
+        const islandRange = mapRange * 1.2;
+        if (Math.abs(relativePos.x) > islandRange || Math.abs(relativePos.z) > islandRange) {
+          return;
         }
 
-        // Calculate size based on island radius
-        const mapSize = 100; // Size of minimap in pixels
-        const mapX = (relativePos.x / mapRange) * (mapSize / 2) + 50;
-        const mapZ = (relativePos.z / mapRange) * (mapSize / 2) + 50;
+        // Calculate position on minimap
+        const mapX = (relativePos.x / mapRange) * 50 + 50;
+        const mapZ = (relativePos.z / mapRange) * 50 + 50;
 
         // Create marker for island
         const islandMarker = document.createElement('div');
@@ -365,7 +370,7 @@ export class HUD {
         islandMarker.style.top = `${mapZ}%`;
 
         // Scale marker based on island size
-        const markerSize = Math.max(5, island.radius / 10);
+        const markerSize = Math.max(6, (island.radius || 10) / 5);
         islandMarker.style.width = `${markerSize}px`;
         islandMarker.style.height = `${markerSize}px`;
 
