@@ -378,12 +378,22 @@ export class HUD {
     // Get our player ID for comparison
     const ourPlayerId = this.game.socketManager?.socket?.id;
     
+    // COORDINATE SYSTEM MAPPING:
+    // In Three.js: 
+    // - Positive Z is forward (when rotation.y = 0)
+    // - Positive X is right
+    // - Rotation increases clockwise (looking from above)
+    //
+    // On minimap screen:
+    // - Top of screen is "forward" (negative Z in Three.js)
+    // - Right of screen is "right" (positive X in Three.js)
+    
     // Add islands
     if (this.game.islands) {
       this.game.islands.forEach(island => {
         if (!island.mesh?.position) return;
 
-        // Calculate relative position in absolute coordinates
+        // Calculate relative position in game world coordinates
         const relativeX = island.mesh.position.x - ourPosition.x;
         const relativeZ = island.mesh.position.z - ourPosition.z;
         
@@ -392,15 +402,16 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange * 1.2) return;
         
-        // Map to radar coordinates (rotate by ship's orientation)
-        // Use consistent coordinate system where forward is -Z (up on screen)
-        const angle = -ourRotation;
-        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
-        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        // Simple rotation formula - rotate around origin (player position)
+        const sin = Math.sin(-ourRotation);
+        const cos = Math.cos(-ourRotation);
+        const rotatedX = (relativeX * cos) - (relativeZ * sin);
+        const rotatedZ = (relativeX * sin) + (relativeZ * cos);
         
-        // Convert to screen coordinates (forward is up)
+        // Convert to screen coordinates (percentage position)
+        // Map to radar coordinates with z-flip (since forward is -z in Three.js but top on screen)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50; // Flip Z so forward is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -438,7 +449,7 @@ export class HUD {
         // Skip if this is our own player
         if (player.id === ourPlayerId) return;
 
-        // Calculate relative position in absolute coordinates
+        // Calculate relative position in game world coordinates
         const relativeX = player.state.position.x - ourPosition.x;
         const relativeZ = player.state.position.z - ourPosition.z;
         
@@ -447,15 +458,16 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange) return;
         
-        // Map to radar coordinates (rotate by ship's orientation)
-        // Use consistent coordinate system where forward is -Z (up on screen)
-        const angle = -ourRotation;
-        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
-        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        // Simple rotation formula - rotate around origin (player position)
+        const sin = Math.sin(-ourRotation);
+        const cos = Math.cos(-ourRotation);
+        const rotatedX = (relativeX * cos) - (relativeZ * sin);
+        const rotatedZ = (relativeX * sin) + (relativeZ * cos);
         
-        // Convert to screen coordinates (forward is up)
+        // Convert to screen coordinates (percentage position)
+        // Map to radar coordinates with z-flip (since forward is -z in Three.js but top on screen)
         const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50;
+        const radarZ = (-rotatedZ / mapRange) * 50 + 50; // Flip Z so forward is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -483,9 +495,10 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Fix the rotation to match the ship's actual heading
-    // The ship is facing forward when rotation.y = 0, which should point up on the minimap
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
+    
+    // Rotate the arrow to match the ship's orientation including our correction
+    // The arrow points up by default in CSS, which is opposite of Three.js Z+ direction
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${ourRotation}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');
