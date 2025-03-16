@@ -305,7 +305,6 @@ export class HUD {
     // Get our ship's position and rotation
     const ourShip = this.game.ship.mesh;
     const ourPosition = ourShip.position;
-    // Adjust rotation to match the game's coordinate system
     const ourRotation = ourShip.rotation.y;
     
     // Get our player ID for comparison
@@ -316,8 +315,8 @@ export class HUD {
       this.game.islands.forEach(island => {
         if (!island.mesh?.position) return;
 
-        // Calculate relative position
-        const relativeX = -(island.mesh.position.x - ourPosition.x);
+        // Calculate relative position in absolute coordinates
+        const relativeX = island.mesh.position.x - ourPosition.x;
         const relativeZ = island.mesh.position.z - ourPosition.z;
         
         // Check if in range
@@ -325,9 +324,9 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange * 1.2) return;
         
-        // Map to radar coordinates
+        // Map to radar coordinates (maintain absolute positioning)
         const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (relativeZ / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Negate Z to match screen coordinates
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -365,8 +364,8 @@ export class HUD {
         // Skip if this is our own player
         if (player.id === ourPlayerId) return;
 
-        // Calculate relative position
-        const relativeX = -(player.state.position.x - ourPosition.x);
+        // Calculate relative position in absolute coordinates
+        const relativeX = player.state.position.x - ourPosition.x;
         const relativeZ = player.state.position.z - ourPosition.z;
         
         // Check if in range
@@ -374,9 +373,9 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange) return;
         
-        // Map to radar coordinates
+        // Map to radar coordinates (maintain absolute positioning)
         const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (relativeZ / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Negate Z to match screen coordinates
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -404,7 +403,7 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Rotate to match the game's coordinate system
+    // Rotate the arrow to match ship's orientation
     playerIndicator.style.transform = `translate(-50%, -50%) rotate(${ourRotation}rad)`;
     
     // Add label for player
