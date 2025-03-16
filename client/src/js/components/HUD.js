@@ -393,7 +393,7 @@ export class HUD {
       this.game.islands.forEach(island => {
         if (!island.mesh?.position) return;
 
-        // Calculate relative position in game world coordinates
+        // Calculate relative position in absolute coordinates (no rotation)
         const relativeX = island.mesh.position.x - ourPosition.x;
         const relativeZ = island.mesh.position.z - ourPosition.z;
         
@@ -402,16 +402,10 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange * 1.2) return;
         
-        // Simple rotation formula - rotate around origin (player position)
-        const sin = Math.sin(-ourRotation);
-        const cos = Math.cos(-ourRotation);
-        const rotatedX = (relativeX * cos) - (relativeZ * sin);
-        const rotatedZ = (relativeX * sin) + (relativeZ * cos);
-        
         // Convert to screen coordinates (percentage position)
-        // Map to radar coordinates with z-flip (since forward is -z in Three.js but top on screen)
-        const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50; // Flip Z so forward is up
+        // No rotation applied - this gives absolute positioning like a compass
+        const radarX = (relativeX / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Flip Z so north is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -449,7 +443,7 @@ export class HUD {
         // Skip if this is our own player
         if (player.id === ourPlayerId) return;
 
-        // Calculate relative position in game world coordinates
+        // Calculate relative position in absolute coordinates (no rotation)
         const relativeX = player.state.position.x - ourPosition.x;
         const relativeZ = player.state.position.z - ourPosition.z;
         
@@ -458,16 +452,10 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange) return;
         
-        // Simple rotation formula - rotate around origin (player position)
-        const sin = Math.sin(-ourRotation);
-        const cos = Math.cos(-ourRotation);
-        const rotatedX = (relativeX * cos) - (relativeZ * sin);
-        const rotatedZ = (relativeX * sin) + (relativeZ * cos);
-        
         // Convert to screen coordinates (percentage position)
-        // Map to radar coordinates with z-flip (since forward is -z in Three.js but top on screen)
-        const radarX = (rotatedX / mapRange) * 50 + 50;
-        const radarZ = (-rotatedZ / mapRange) * 50 + 50; // Flip Z so forward is up
+        // No rotation applied - this gives absolute positioning like a compass
+        const radarX = (relativeX / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Flip Z so north is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -496,8 +484,8 @@ export class HUD {
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
     
-    // Rotate the arrow to match the ship's orientation including our correction
-    // The arrow points up by default in CSS, which is opposite of Three.js Z+ direction
+    // Rotate the arrow to match the ship's orientation
+    // For a compass-style minimap, just use the raw rotation value
     playerIndicator.style.transform = `translate(-50%, -50%) rotate(${ourRotation}rad)`;
     
     // Add label for player
