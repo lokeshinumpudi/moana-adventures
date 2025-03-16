@@ -315,9 +315,9 @@ export class HUD {
       this.game.islands.forEach(island => {
         if (!island.mesh?.position) return;
 
-        // Calculate relative position
+        // Calculate relative position (invert Z to match game coordinates)
         const relativeX = island.mesh.position.x - ourPosition.x;
-        const relativeZ = island.mesh.position.z - ourPosition.z;
+        const relativeZ = -(island.mesh.position.z - ourPosition.z); // Invert Z
         
         // Check if in range
         const mapRange = 200; // World units visible on minimap
@@ -364,9 +364,9 @@ export class HUD {
         // Skip if this is our own player
         if (player.id === ourPlayerId) return;
 
-        // Calculate relative position
+        // Calculate relative position (invert Z to match game coordinates)
         const relativeX = player.state.position.x - ourPosition.x;
-        const relativeZ = player.state.position.z - ourPosition.z;
+        const relativeZ = -(player.state.position.z - ourPosition.z); // Invert Z
         
         // Check if in range
         const mapRange = 200; // World units visible on minimap
@@ -403,8 +403,8 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Rotate to match ship's direction (no additional offset needed)
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
+    // Rotate to match ship's direction and add π/2 to align with game coordinates
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation + Math.PI/2}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');
