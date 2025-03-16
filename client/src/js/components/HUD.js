@@ -297,6 +297,32 @@ export class HUD {
     background.className = 'minimap-background';
     this.blipsContainer.appendChild(background);
 
+    // Add compass rose
+    const compassRose = document.createElement('div');
+    compassRose.className = 'compass-rose';
+    
+    // Add compass lines
+    const lineNS = document.createElement('div');
+    lineNS.className = 'compass-line compass-line-ns';
+    compassRose.appendChild(lineNS);
+    
+    const lineEW = document.createElement('div');
+    lineEW.className = 'compass-line compass-line-ew';
+    compassRose.appendChild(lineEW);
+    
+    // Add compass directions
+    const directions = ['N', 'E', 'S', 'W'];
+    const classes = ['compass-n', 'compass-e', 'compass-s', 'compass-w'];
+    
+    directions.forEach((dir, i) => {
+      const direction = document.createElement('div');
+      direction.className = `compass-direction ${classes[i]}`;
+      direction.textContent = dir;
+      compassRose.appendChild(direction);
+    });
+    
+    this.blipsContainer.appendChild(compassRose);
+
     // Add radar sweep
     const sweep = document.createElement('div');
     sweep.className = 'radar-sweep';
@@ -324,9 +350,14 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange * 1.2) return;
         
-        // Map to radar coordinates (maintain absolute positioning)
-        const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Negate Z to match screen coordinates
+        // Map to radar coordinates (rotate by ship's orientation)
+        const angle = -ourRotation + Math.PI/2; // Add 90 degrees to align with world coordinates
+        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
+        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        
+        // Convert to screen coordinates (flip Z to match screen coordinates)
+        const radarX = (rotatedX / mapRange) * 50 + 50;
+        const radarZ = (rotatedZ / mapRange) * 50 + 50; // Remove negative sign
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -373,9 +404,14 @@ export class HUD {
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange) return;
         
-        // Map to radar coordinates (maintain absolute positioning)
-        const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Negate Z to match screen coordinates
+        // Map to radar coordinates (rotate by ship's orientation)
+        const angle = -ourRotation + Math.PI/2; // Add 90 degrees to align with world coordinates
+        const rotatedX = relativeX * Math.cos(angle) - relativeZ * Math.sin(angle);
+        const rotatedZ = relativeX * Math.sin(angle) + relativeZ * Math.cos(angle);
+        
+        // Convert to screen coordinates (flip Z to match screen coordinates)
+        const radarX = (rotatedX / mapRange) * 50 + 50;
+        const radarZ = (rotatedZ / mapRange) * 50 + 50; // Remove negative sign
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -403,8 +439,8 @@ export class HUD {
     playerIndicator.className = 'player-arrow';
     playerIndicator.style.left = '50%';
     playerIndicator.style.top = '50%';
-    // Rotate the arrow to match ship's orientation
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${ourRotation}rad)`;
+    // Rotate arrow to match ship's orientation (add 90 degrees to align with world)
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation + Math.PI/2}rad)`;
     
     // Add label for player
     const playerLabel = document.createElement('div');

@@ -20,6 +20,7 @@ import { DebugOverlay } from './utils/DebugOverlay.js';
 import { PhysicsManager } from './utils/PhysicsManager.js';
 import { SoundManager } from './utils/SoundManager.js';
 import { AudioControls } from './components/AudioControls.js';
+import { Weather } from './effects/Weather';
 
 export class Game {
   constructor(container) {
@@ -166,6 +167,9 @@ export class Game {
     
     // Initialize audio controls
     this.audioControls = null; // Will be initialized in init()
+
+    // Weather system will be initialized after scene setup
+    this.weather = null;
   }
 
   init() {
@@ -173,6 +177,9 @@ export class Game {
       try {
         // Set up Three.js scene
         this.setupScene();
+
+        // Initialize weather system after scene is set up
+        this.weather = new Weather(this.scene);
 
         // Set up input manager first
         this.inputManager = new InputManager(this);
@@ -1039,6 +1046,9 @@ export class Game {
 
     // Update game state
     this.update(delta);
+
+    // Update weather
+    this.weather.update();
 
     // Render scene
     this.render();

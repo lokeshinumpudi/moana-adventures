@@ -393,4 +393,48 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   transition: transform 0.1s ease-out;
+}
+
+/* Compass rose */
+.compass-rose {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.compass-direction {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+}
+
+.compass-n { top: 10%; left: 50%; }
+.compass-s { bottom: 10%; left: 50%; }
+.compass-e { top: 50%; right: 10%; }
+.compass-w { top: 50%; left: 10%; }
+
+/* Compass lines */
+.compass-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+}
+
+.compass-line-ns {
+  width: 1px;
+  height: 80%;
+  left: 50%;
+  top: 10%;
+}
+
+.compass-line-ew {
+  height: 1px;
+  width: 80%;
+  top: 50%;
+  left: 10%;
 } 
