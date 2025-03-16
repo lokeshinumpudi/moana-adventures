@@ -186,6 +186,9 @@ export class InputManager {
   handleTouchStart(event) {
     event.preventDefault();
     
+    // Store the touch ID that's controlling the joystick
+    let joystickTouchId = null;
+    
     // Handle multiple touches
     for (let i = 0; i < event.touches.length; i++) {
       const touch = event.touches[i];
@@ -193,23 +196,17 @@ export class InputManager {
       // Get the touched element
       const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
       
-      // First touch or joystick touch
-      if (i === 0 || touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
-        if (!this.touchJoystickActive) {
-          this.isTouching = true;
-          this.touchStartPos = { x: touch.clientX, y: touch.clientY };
-          this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
-          
-          // Handle joystick touch
-          if (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
-            this.touchJoystickActive = true;
-            this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
-            
-            // Update joystick visuals
-            const rect = this.virtualJoystick.getBoundingClientRect();
-            this.joystickKnob.style.transform = `translate(${touch.clientX - rect.left - rect.width/2}px, ${touch.clientY - rect.top - rect.height/2}px)`;
-          }
-        }
+      // Handle joystick touch
+      if (!this.touchJoystickActive && (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob)) {
+        this.touchJoystickActive = true;
+        this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
+        this.isTouching = true;
+        this.touchStartPos = { x: touch.clientX, y: touch.clientY };
+        this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
+        joystickTouchId = touch.identifier;
+        
+        // Update joystick visuals
+        this.joystickKnob.style.transform = `translate(0px, 0px)`;
       }
       
       // Handle cannon button touches (can happen simultaneously with joystick)
@@ -234,28 +231,32 @@ export class InputManager {
   handleTouchMove(event) {
     event.preventDefault();
     
+    // Only process if joystick is active
+    if (!this.touchJoystickActive) return;
+    
     // Find the joystick touch if it exists
     let joystickTouch = null;
+    
+    // Try to find the touch that's closest to the joystick center
+    let closestDistance = Infinity;
+    
     for (let i = 0; i < event.touches.length; i++) {
       const touch = event.touches[i];
-      const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
       
-      // If this touch started on or near the joystick, use it for joystick control
-      if (this.touchJoystickActive) {
-        const dx = touch.clientX - this.touchJoystickCenter.x;
-        const dy = touch.clientY - this.touchJoystickCenter.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // If this touch is close to where the joystick was activated, it's likely the joystick touch
-        if (distance < 150) {
-          joystickTouch = touch;
-          break;
-        }
+      // Calculate distance from joystick center
+      const dx = touch.clientX - this.touchJoystickCenter.x;
+      const dy = touch.clientY - this.touchJoystickCenter.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // If this touch is closer to the joystick center than any we've seen so far
+      if (distance < closestDistance && distance < 150) {
+        closestDistance = distance;
+        joystickTouch = touch;
       }
     }
     
     // If we found a joystick touch, update the joystick
-    if (joystickTouch && this.touchJoystickActive) {
+    if (joystickTouch) {
       this.touchCurrentPos = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       
       // Calculate joystick delta
@@ -268,13 +269,12 @@ export class InputManager {
       const scale = distance > maxRadius ? maxRadius / distance : 1;
       
       // Update joystick knob position
-      const rect = this.virtualJoystick.getBoundingClientRect();
       const knobX = dx * scale;
       const knobY = dy * scale;
       this.joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
       
       // Update virtual key states based on joystick position
-      const deadzone = 20;
+      const deadzone = 10; // Reduced deadzone for better responsiveness
       this.keys['ArrowUp'] = dy < -deadzone;
       this.keys['ArrowDown'] = dy > deadzone;
       this.keys['ArrowLeft'] = dx < -deadzone;
@@ -285,28 +285,85 @@ export class InputManager {
   handleTouchEnd(event) {
     event.preventDefault();
     
-    // Only reset joystick if no touches remain
-    if (event.touches.length === 0) {
-      this.isTouching = false;
-      this.touchJoystickActive = false;
+    // Check if any remaining touches are on the joystick
+    let joystickTouchStillActive = false;
+    
+    for (let i = 0; i < event.touches.length; i++) {
+      const touch = event.touches[i];
+      const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
       
-      // Reset joystick visuals
-      this.joystickKnob.style.transform = 'translate(-50%, -50%)';
+      // If this touch is on or near the joystick, the joystick is still active
+      if (touchedElement === this.virtualJoystick || touchedElement === this.joystickKnob) {
+        joystickTouchStillActive = true;
+        
+        // Update joystick center to this touch
+        this.touchJoystickCenter = { x: touch.clientX, y: touch.clientY };
+        this.touchCurrentPos = { x: touch.clientX, y: touch.clientY };
+        break;
+      }
       
-      // Reset virtual key states
-      this.keys['ArrowUp'] = false;
-      this.keys['ArrowDown'] = false;
-      this.keys['ArrowLeft'] = false;
-      this.keys['ArrowRight'] = false;
+      // Also check if the touch is close to the joystick center
+      const dx = touch.clientX - this.touchJoystickCenter.x;
+      const dy = touch.clientY - this.touchJoystickCenter.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < 150) {
+        joystickTouchStillActive = true;
+        break;
+      }
     }
     
-    // Reset fire button visuals
-    this.fireButtons.left.style.transform = 'scale(1)';
-    this.fireButtons.left.style.opacity = '1';
-    this.fireButtons.right.style.transform = 'scale(1)';
-    this.fireButtons.right.style.opacity = '1';
-    this.fireButtons.front.style.transform = 'scale(1)';
-    this.fireButtons.front.style.opacity = '1';
+    // Only reset joystick if no touches remain on it
+    if (!joystickTouchStillActive) {
+      // If no touches remain at all, reset everything
+      if (event.touches.length === 0) {
+        this.isTouching = false;
+        this.touchJoystickActive = false;
+        
+        // Reset virtual key states
+        this.keys['ArrowUp'] = false;
+        this.keys['ArrowDown'] = false;
+        this.keys['ArrowLeft'] = false;
+        this.keys['ArrowRight'] = false;
+        
+        // Reset joystick visuals only when no touches remain
+        this.joystickKnob.style.transform = 'translate(0px, 0px)';
+      }
+    }
+    
+    // Check if any remaining touches are on fire buttons
+    let leftButtonTouched = false;
+    let rightButtonTouched = false;
+    let frontButtonTouched = false;
+    
+    for (let i = 0; i < event.touches.length; i++) {
+      const touch = event.touches[i];
+      const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
+      
+      if (touchedElement === this.fireButtons.left) {
+        leftButtonTouched = true;
+      } else if (touchedElement === this.fireButtons.right) {
+        rightButtonTouched = true;
+      } else if (touchedElement === this.fireButtons.front) {
+        frontButtonTouched = true;
+      }
+    }
+    
+    // Reset fire button visuals if no touches remain on them
+    if (!leftButtonTouched) {
+      this.fireButtons.left.style.transform = '';
+      this.fireButtons.left.style.opacity = '';
+    }
+    
+    if (!rightButtonTouched) {
+      this.fireButtons.right.style.transform = '';
+      this.fireButtons.right.style.opacity = '';
+    }
+    
+    if (!frontButtonTouched) {
+      this.fireButtons.front.style.transform = '';
+      this.fireButtons.front.style.opacity = '';
+    }
   }
 
   updateAutoFire() {

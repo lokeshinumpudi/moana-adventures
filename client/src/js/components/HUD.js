@@ -292,16 +292,12 @@ export class HUD {
       this.blipsContainer.removeChild(this.blipsContainer.firstChild);
     }
 
-    // Add minimap background if it doesn't exist
-    if (!this.blipsContainer.querySelector('.minimap-background')) {
-      const background = document.createElement('div');
-      background.className = 'minimap-background';
-      this.blipsContainer.appendChild(background);
-    }
+    // Add minimap background
+    const background = document.createElement('div');
+    background.className = 'minimap-background';
+    this.blipsContainer.appendChild(background);
 
-    const mapRange = 200; // World units visible on minimap
-
-    // Add radar sweep effect
+    // Add radar sweep
     const sweep = document.createElement('div');
     sweep.className = 'radar-sweep';
     this.blipsContainer.appendChild(sweep);
@@ -311,64 +307,9 @@ export class HUD {
     const ourPosition = ourShip.position;
     const ourRotation = ourShip.rotation.y;
     
-    // ALWAYS add our player indicator first (blue arrow in center)
-    const playerIndicator = document.createElement('div');
-    playerIndicator.className = 'player-indicator player-arrow'; // Blue arrow with specific class
-    playerIndicator.style.position = 'absolute';
-    playerIndicator.style.left = '50%';
-    playerIndicator.style.top = '50%';
-    playerIndicator.style.width = '0';
-    playerIndicator.style.height = '0';
-    playerIndicator.style.borderLeft = '8px solid transparent';
-    playerIndicator.style.borderRight = '8px solid transparent';
-    playerIndicator.style.borderBottom = '16px solid #00a8ff'; // Bright blue color
-    playerIndicator.style.transformOrigin = 'center bottom';
-    playerIndicator.style.zIndex = '4';
-    playerIndicator.style.boxShadow = '0 0 10px #00a8ff';
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
-    this.blipsContainer.appendChild(playerIndicator);
-
-    // Add other players as red dots
-    if (this.game.socketManager) {
-      const otherPlayers = Array.from(this.game.socketManager.otherPlayers.values());
-      
-      otherPlayers.forEach(player => {
-        if (!player?.state?.position) return;
-
-        // Skip if this is our own player (to avoid showing both blue arrow and red dot)
-        if (player.id === this.game.socketManager.socket.id) return;
-
-        // Calculate relative position
-        const relativeX = player.state.position.x - ourPosition.x;
-        const relativeZ = player.state.position.z - ourPosition.z;
-        
-        // Check if in range
-        const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
-        if (distance > mapRange) return;
-        
-        // Map to radar coordinates
-        const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (relativeZ / mapRange) * 50 + 50;
-        
-        // Only show if within radar bounds
-        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
-          // Create enemy blip (red dot)
-          const enemyBlip = document.createElement('div');
-          enemyBlip.className = 'enemy-blip'; // Red dot
-          enemyBlip.style.width = '8px';
-          enemyBlip.style.height = '8px';
-          enemyBlip.style.backgroundColor = '#ff0000'; // Bright red color
-          enemyBlip.style.borderRadius = '50%';
-          enemyBlip.style.transform = 'translate(-50%, -50%)';
-          enemyBlip.style.boxShadow = '0 0 8px #ff0000';
-          enemyBlip.style.zIndex = '3';
-          enemyBlip.style.left = `${radarX}%`;
-          enemyBlip.style.top = `${radarZ}%`;
-          this.blipsContainer.appendChild(enemyBlip);
-        }
-      });
-    }
-
+    // Get our player ID for comparison
+    const ourPlayerId = this.game.socketManager?.socket?.id;
+    
     // Add islands
     if (this.game.islands) {
       this.game.islands.forEach(island => {
@@ -379,6 +320,7 @@ export class HUD {
         const relativeZ = island.mesh.position.z - ourPosition.z;
         
         // Check if in range
+        const mapRange = 200; // World units visible on minimap
         const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
         if (distance > mapRange * 1.2) return;
         
@@ -390,23 +332,89 @@ export class HUD {
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
           // Create island marker (green square)
           const islandMarker = document.createElement('div');
-          islandMarker.className = 'island-marker'; // Green square
+          islandMarker.className = 'island-marker';
+          islandMarker.style.left = `${radarX}%`;
+          islandMarker.style.top = `${radarZ}%`;
 
           // Scale marker based on island size
           const markerSize = Math.max(6, (island.radius || 10) / 5);
           islandMarker.style.width = `${markerSize}px`;
           islandMarker.style.height = `${markerSize}px`;
-          islandMarker.style.backgroundColor = '#8BC34A'; // Green color
-          islandMarker.style.borderRadius = '2px';
-          islandMarker.style.transform = 'translate(-50%, -50%) rotate(45deg)';
-          islandMarker.style.zIndex = '2';
-          islandMarker.style.boxShadow = '0 0 4px #8BC34A';
-          islandMarker.style.left = `${radarX}%`;
-          islandMarker.style.top = `${radarZ}%`;
+          
+          // Add island label
+          const islandLabel = document.createElement('div');
+          islandLabel.className = 'minimap-label island-label';
+          islandLabel.textContent = 'Island';
+          islandLabel.style.left = `${radarX}%`;
+          islandLabel.style.top = `${radarZ + 5}%`;
+          
           this.blipsContainer.appendChild(islandMarker);
+          this.blipsContainer.appendChild(islandLabel);
         }
       });
     }
+    
+    // Add other players as red dots with labels
+    if (this.game.socketManager) {
+      const otherPlayers = Array.from(this.game.socketManager.otherPlayers.values());
+      
+      otherPlayers.forEach(player => {
+        if (!player?.state?.position) return;
+
+        // Skip if this is our own player
+        if (player.id === ourPlayerId) return;
+
+        // Calculate relative position
+        const relativeX = player.state.position.x - ourPosition.x;
+        const relativeZ = player.state.position.z - ourPosition.z;
+        
+        // Check if in range
+        const mapRange = 200; // World units visible on minimap
+        const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
+        if (distance > mapRange) return;
+        
+        // Map to radar coordinates
+        const radarX = (relativeX / mapRange) * 50 + 50;
+        const radarZ = (relativeZ / mapRange) * 50 + 50;
+        
+        // Only show if within radar bounds
+        if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
+          // Create enemy blip (red dot)
+          const enemyBlip = document.createElement('div');
+          enemyBlip.className = 'enemy-blip';
+          enemyBlip.style.left = `${radarX}%`;
+          enemyBlip.style.top = `${radarZ}%`;
+          
+          // Add enemy label
+          const enemyLabel = document.createElement('div');
+          enemyLabel.className = 'minimap-label enemy-label';
+          enemyLabel.textContent = 'Enemy';
+          enemyLabel.style.left = `${radarX}%`;
+          enemyLabel.style.top = `${radarZ + 5}%`;
+          
+          this.blipsContainer.appendChild(enemyBlip);
+          this.blipsContainer.appendChild(enemyLabel);
+        }
+      });
+    }
+    
+    // Add player indicator (ship-like arrow in center)
+    const playerIndicator = document.createElement('div');
+    playerIndicator.className = 'player-arrow';
+    playerIndicator.style.left = '50%';
+    playerIndicator.style.top = '50%';
+    // Rotate to match ship's direction (no additional offset needed)
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
+    
+    // Add label for player
+    const playerLabel = document.createElement('div');
+    playerLabel.className = 'minimap-label player-label';
+    playerLabel.textContent = 'You';
+    playerLabel.style.left = '50%';
+    playerLabel.style.top = '60%'; // Move label down a bit to avoid overlap
+    
+    this.blipsContainer.appendChild(playerIndicator);
+    this.blipsContainer.appendChild(playerLabel);
   }
 
   calculateRelativePosition(targetPos, playerPos) {
