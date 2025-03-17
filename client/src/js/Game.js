@@ -340,6 +340,12 @@ export class Game {
             this.scene.add(this.explorer.mesh);
             resolve();
           }),
+          
+          // Initialize particle system
+          new Promise(resolve => {
+            this.particleSystem = new ParticleSystem(this.scene);
+            resolve();
+          }),
 
           // Create world - either from server data or placeholder
           new Promise((resolve, reject) => {

@@ -308,6 +308,117 @@ export class ParticleSystem {
     }
   }
 
+  createExplosion(position, size = 1.0) {
+    // Create a powerful explosion with fire, smoke, and debris
+    const fireCount = Math.floor(Math.random() * 15) + 25;
+    const smokeCount = Math.floor(Math.random() * 10) + 15;
+    const debrisCount = Math.floor(Math.random() * 20) + 30;
+    
+    // Scale factor based on size parameter
+    const scaleFactor = size;
+    
+    // Create fire particles (center of explosion)
+    for (let i = 0; i < fireCount; i++) {
+      // Calculate random velocity in all directions
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 2.0,
+        (Math.random() - 0.5) * 2.0,
+        (Math.random() - 0.5) * 2.0
+      ).normalize().multiplyScalar(Math.random() * 0.8 + 0.4).multiplyScalar(scaleFactor);
+
+      // Create fire particle
+      this.createParticle(position.clone(), {
+        size: Math.random() < 0.7 ? 'medium' : 'large',
+        material: new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xff4500).lerp(new THREE.Color(0xffcc00), Math.random()),
+          transparent: true,
+          opacity: 0.9,
+          blending: THREE.AdditiveBlending,
+        }),
+        velocity: velocity,
+        lifespan: (300 + Math.random() * 200) * scaleFactor,
+        fadeRate: 0.1,
+        scaleRate: 0.96,
+        gravity: false,
+        drag: 0.98,
+      });
+    }
+    
+    // Create smoke particles (follows after fire)
+    for (let i = 0; i < smokeCount; i++) {
+      // Calculate random velocity, mostly upward
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.6,
+        Math.random() * 0.4 + 0.2,
+        (Math.random() - 0.5) * 0.6
+      ).multiplyScalar(scaleFactor);
+
+      // Create smoke particle with slight delay
+      setTimeout(() => {
+        if (!this.scene) return; // Scene might be gone if game was destroyed
+        
+        this.createParticle(position.clone(), {
+          size: 'large',
+          material: this.smokeMaterial.clone(),
+          velocity: velocity,
+          lifespan: (1000 + Math.random() * 1000) * scaleFactor,
+          fadeRate: 0.02,
+          scaleRate: 1.01, // Smoke expands
+          gravity: false,
+          drag: 0.99,
+        });
+      }, Math.random() * 200);
+    }
+    
+    // Create debris particles
+    for (let i = 0; i < debrisCount; i++) {
+      // Calculate random direction
+      const direction = new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      ).normalize();
+      
+      // Random speed based on distance from center
+      const speed = (Math.random() * 1.0 + 0.5) * scaleFactor;
+      
+      // Create debris particle
+      this.createParticle(position.clone(), {
+        size: 'small',
+        material: new THREE.MeshBasicMaterial({
+          color: Math.random() > 0.5 ? 0xff3300 : 0x666666,
+          transparent: true,
+          opacity: 0.9,
+          blending: THREE.AdditiveBlending,
+        }),
+        velocity: direction.clone().multiplyScalar(speed),
+        acceleration: new THREE.Vector3(0, -1.0, 0),
+        lifespan: (500 + Math.random() * 500) * scaleFactor,
+        fadeRate: 0.05,
+        scaleRate: 0.97,
+        gravity: true,
+        drag: 0.97,
+      });
+    }
+    
+    // Create flash at center
+    this.createParticle(position.clone(), {
+      size: 'large',
+      material: new THREE.MeshBasicMaterial({
+        color: 0xffffcc,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+      }),
+      velocity: new THREE.Vector3(0, 0, 0),
+      lifespan: 200 * scaleFactor,
+      fadeRate: 0.2,
+      scaleRate: 1.2,
+      gravity: false,
+      drag: 1.0,
+    });
+  }
+
   createCollisionEffect(position) {
     // Create a combination of hit and splash effects
     this.createHitEffect(position);

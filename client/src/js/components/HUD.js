@@ -87,8 +87,53 @@ export class HUD {
     this.timeDisplay.appendChild(this.timeClock);
     this.timeDisplay.appendChild(this.timePeriod);
     
-    // Add to container
-    this.container.appendChild(this.timeDisplay);
+    // Clear any existing time display
+    const existingTimeDisplay = this.statsContainer.querySelector('.time-display');
+    if (existingTimeDisplay) {
+      this.statsContainer.removeChild(existingTimeDisplay);
+    }
+    
+    // Add to stats container instead of main container to save space
+    this.statsContainer.appendChild(this.timeDisplay);
+    
+    // Create mobile-optimized debug button if debug is enabled
+    if (this.game.debug) {
+      this.createMobileDebugButton();
+    }
+  }
+  
+  createMobileDebugButton() {
+    // Check if debug button already exists
+    if (document.getElementById('debug-button')) return;
+    
+    // Create debug button for mobile that's easier to tap
+    const debugButton = document.createElement('button');
+    debugButton.id = 'debug-button';
+    debugButton.textContent = 'Debug';
+    debugButton.style.position = 'absolute';
+    debugButton.style.top = '5px';
+    debugButton.style.right = '115px';
+    debugButton.style.zIndex = '10000';
+    debugButton.style.padding = '3px 6px';
+    debugButton.style.fontSize = '10px';
+    debugButton.style.background = '#32CD32';
+    debugButton.style.color = '#000';
+    debugButton.style.border = 'none';
+    debugButton.style.borderRadius = '3px';
+    debugButton.style.cursor = 'pointer';
+    
+    // Toggle debug overlay
+    debugButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const debugOverlay = document.getElementById('debug-overlay');
+      if (debugOverlay) {
+        debugOverlay.style.display = debugOverlay.style.display === 'none' ? 'block' : 'none';
+      } else {
+        this.game.toggleDebug();
+      }
+    });
+    
+    this.container.appendChild(debugButton);
   }
 
   update(data = {}) {
@@ -352,7 +397,8 @@ export class HUD {
     lineEW.className = 'compass-line compass-line-ew';
     compassRose.appendChild(lineEW);
     
-    // Add compass directions
+    // Add compass directions - Use simpler indicators for mobile
+    const isMobile = window.innerWidth <= 1024;
     const directions = ['N', 'E', 'S', 'W'];
     const classes = ['compass-n', 'compass-e', 'compass-s', 'compass-w'];
     
@@ -403,9 +449,9 @@ export class HUD {
         if (distance > mapRange * 1.2) return;
         
         // Convert to screen coordinates (percentage position)
-        // No rotation applied - this gives absolute positioning like a compass
-        const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Flip Z so north is up
+        // Flip X coordinate since moving left in world should show object moving left on minimap
+        const radarX = (-relativeX / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Keep Z flipped so north is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -420,15 +466,17 @@ export class HUD {
           islandMarker.style.width = `${markerSize}px`;
           islandMarker.style.height = `${markerSize}px`;
           
-          // Add island label
-          const islandLabel = document.createElement('div');
-          islandLabel.className = 'minimap-label island-label';
-          islandLabel.textContent = 'Island';
-          islandLabel.style.left = `${radarX}%`;
-          islandLabel.style.top = `${radarZ + 5}%`;
+          // On mobile, only show labels for nearby islands to reduce clutter
+          if (!isMobile || distance < mapRange * 0.5) {
+            const islandLabel = document.createElement('div');
+            islandLabel.className = 'minimap-label island-label';
+            islandLabel.textContent = 'Island';
+            islandLabel.style.left = `${radarX}%`;
+            islandLabel.style.top = `${radarZ + 5}%`;
+            this.blipsContainer.appendChild(islandLabel);
+          }
           
           this.blipsContainer.appendChild(islandMarker);
-          this.blipsContainer.appendChild(islandLabel);
         }
       });
     }
@@ -453,9 +501,9 @@ export class HUD {
         if (distance > mapRange) return;
         
         // Convert to screen coordinates (percentage position)
-        // No rotation applied - this gives absolute positioning like a compass
-        const radarX = (relativeX / mapRange) * 50 + 50;
-        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Flip Z so north is up
+        // Flip X coordinate since moving left in world should show object moving left on minimap
+        const radarX = (-relativeX / mapRange) * 50 + 50;
+        const radarZ = (-relativeZ / mapRange) * 50 + 50; // Keep Z flipped so north is up
         
         // Only show if within radar bounds
         if (radarX >= 0 && radarX <= 100 && radarZ >= 0 && radarZ <= 100) {
@@ -465,15 +513,17 @@ export class HUD {
           enemyBlip.style.left = `${radarX}%`;
           enemyBlip.style.top = `${radarZ}%`;
           
-          // Add enemy label
-          const enemyLabel = document.createElement('div');
-          enemyLabel.className = 'minimap-label enemy-label';
-          enemyLabel.textContent = 'Enemy';
-          enemyLabel.style.left = `${radarX}%`;
-          enemyLabel.style.top = `${radarZ + 5}%`;
+          // On mobile, only show labels for nearby enemies to reduce clutter
+          if (!isMobile || distance < mapRange * 0.5) {
+            const enemyLabel = document.createElement('div');
+            enemyLabel.className = 'minimap-label enemy-label';
+            enemyLabel.textContent = 'Enemy';
+            enemyLabel.style.left = `${radarX}%`;
+            enemyLabel.style.top = `${radarZ + 5}%`;
+            this.blipsContainer.appendChild(enemyLabel);
+          }
           
           this.blipsContainer.appendChild(enemyBlip);
-          this.blipsContainer.appendChild(enemyLabel);
         }
       });
     }
@@ -485,10 +535,10 @@ export class HUD {
     playerIndicator.style.top = '50%';
     
     // Rotate the arrow to match the ship's orientation
-    // For a compass-style minimap, just use the raw rotation value
-    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${ourRotation}rad)`;
+    // For a compass-style minimap, just use the raw rotation value but flip it
+    playerIndicator.style.transform = `translate(-50%, -50%) rotate(${-ourRotation}rad)`;
     
-    // Add label for player
+    // Add label for player - on mobile only if minimap is larger than certain size
     const playerLabel = document.createElement('div');
     playerLabel.className = 'minimap-label player-label';
     playerLabel.textContent = 'You';
@@ -496,7 +546,11 @@ export class HUD {
     playerLabel.style.top = '60%'; // Move label down a bit to avoid overlap
     
     this.blipsContainer.appendChild(playerIndicator);
-    this.blipsContainer.appendChild(playerLabel);
+    
+    // Skip player label on very small screens in landscape mode
+    if (!isMobile || !(window.innerWidth > window.innerHeight && window.innerWidth < 768)) {
+      this.blipsContainer.appendChild(playerLabel);
+    }
   }
 
   calculateRelativePosition(targetPos, playerPos) {

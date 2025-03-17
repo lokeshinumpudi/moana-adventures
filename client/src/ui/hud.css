@@ -482,4 +482,315 @@
   .time-period {
     font-size: 12px;
   }
+}
+
+/* Mobile-optimized UI adjustments */
+@media screen and (max-width: 1024px) {
+  /* Compact scorecard */
+  .stats-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 120px;
+    min-width: unset;
+    padding: 10px;
+    font-size: 12px;
+    opacity: 0.95;
+    backdrop-filter: blur(5px);
+  }
+
+  .score-display {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  /* Integrated time display inside scorecard */
+  .stats-container .time-display {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    margin-bottom: 4px;
+    padding: 0;
+    width: 100%;
+    position: relative;
+    top: auto;
+    right: auto;
+    background: none;
+  }
+
+  .stats-container .time-clock {
+    font-size: 14px;
+    margin: 0;
+    color: var(--primary-color);
+    font-weight: bold;
+  }
+
+  .stats-container .time-period {
+    font-size: 10px;
+    padding: 2px 4px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+  }
+
+  .health-bar-container {
+    width: 100%;
+    height: 12px;
+    margin: 4px 0;
+  }
+
+  .health-bar-text {
+    font-size: 9px;
+    line-height: 12px;
+  }
+
+  .kills-display {
+    font-size: 14px;
+    margin: 4px 0;
+  }
+
+  .online-count {
+    font-size: 12px;
+    margin: 4px 0;
+  }
+
+  /* Adjust powerups for mobile */
+  .powerup-item {
+    padding: 4px;
+    margin: 2px 0;
+  }
+
+  .powerup-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 14px;
+    margin-right: 6px;
+  }
+
+  .powerup-name {
+    font-size: 11px;
+  }
+
+  /* Minimap adjustments */
+  #mini-map-container {
+    top: 10px;
+    right: 10px;
+    width: 100px;
+    height: 100px;
+    opacity: 0.85;
+  }
+
+  .minimap-label {
+    font-size: 8px;
+  }
+
+  /* Better joystick and controls */
+  #left-button, #right-button, #front-button {
+    bottom: 20px;
+    width: 55px;
+    height: 55px;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+
+  #left-button {
+    left: 20px;
+  }
+
+  #front-button {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  #right-button {
+    right: 20px;
+  }
+
+  /* Joystick container adjustments */
+  #joystick-container {
+    position: absolute;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 120px;
+    opacity: 0.7;
+  }
+
+  .notification {
+    width: auto;
+    max-width: 80%;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  /* Debug button position for mobile */
+  #debug-button {
+    top: 5px;
+    right: 115px;
+    padding: 3px 6px;
+    font-size: 10px;
+    z-index: 10000;
+  }
+}
+
+/* Even more compact for very small screens */
+@media screen and (max-width: 360px) {
+  .stats-container {
+    width: 100px;
+    padding: 8px;
+  }
+
+  .score-display {
+    font-size: 16px;
+  }
+
+  .kills-display,
+  .online-count {
+    font-size: 11px;
+  }
+}
+
+/* Landscape specific adjustments */
+@media screen and (max-width: 1024px) and (orientation: landscape) {
+  /* Move minimap to different position in landscape */
+  #mini-map-container {
+    top: unset;
+    bottom: 10px;
+    right: 10px;
+    width: 80px;
+    height: 80px;
+  }
+
+  /* Adjust controls for landscape */
+  #left-button, #right-button, #front-button {
+    bottom: 15px;
+    width: 45px;
+    height: 45px;
+  }
+
+  #joystick-container {
+    bottom: 70px;
+    width: 100px;
+    height: 100px;
+  }
+
+  /* Make stats container more compact in landscape */
+  .stats-container {
+    width: 120px;
+    padding: 5px;
+    font-size: 10px;
+  }
+}
+
+/* Integrated time display inside scorecard */
+.time-display {
+  margin-top: 5px;
+  font-size: 0.9em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.time-clock {
+  font-size: 0.9em;
+  margin-right: 5px;
+}
+
+.time-period {
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Mobile Joystick and Controls */
+#joystick-container {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  z-index: 100;
+  touch-action: none;
+}
+
+#joystick-outer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background-color: rgba(91, 192, 222, 0.15);
+  border: 2px solid rgba(91, 192, 222, 0.6);
+}
+
+#joystick-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(0, 142, 255, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 15px rgba(0, 162, 255, 0.7);
+}
+
+.mobile-button {
+  position: absolute;
+  bottom: 25px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  user-select: none;
+  text-align: center;
+  text-shadow: 0 0 4px black;
+  touch-action: none;
+  transition: transform 0.1s, background 0.2s;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+}
+
+.mobile-button:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#left-button {
+  left: 20px;
+  background: linear-gradient(to bottom, #c5aa4a, #ffd54f);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+#right-button {
+  right: 20px;
+  background: linear-gradient(to bottom, #c5aa4a, #ffd54f);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+#front-button {
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, #d14242, #ff6b6b);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+#front-button:active {
+  transform: translateX(-50%) scale(0.95);
 } 
