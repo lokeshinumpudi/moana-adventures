@@ -17,12 +17,27 @@ export class Island {
     this.dockDirection = null; // Direction the dock is facing
     this.id = options.id || `island_${Math.floor(Math.random() * 10000)}`;
     this.physicsBody = null;
+    
+    // Custom naming and sponsorship properties
+    this.customName = options.customName || null;
+    this.isSponsored = options.isSponsored || false;
+    this.sponsorData = options.sponsorData || null;
+    this.hasSignage = options.hasSignage !== false && (this.customName || this.isSponsored);
 
     // Create mesh
     this.mesh = new THREE.Group();
     this.mesh.position.copy(this._position);
     this.mesh.userData.type = 'island';
     this.mesh.userData.id = this.id;
+    
+    // Store custom name in userData for easy access
+    if (this.customName) {
+      this.mesh.userData.customName = this.customName;
+    }
+    
+    if (this.isSponsored) {
+      this.mesh.userData.isSponsored = true;
+    }
 
     // Create island
     this.createIsland();
@@ -35,6 +50,11 @@ export class Island {
     // Add dock if enabled
     if (this.dock) {
       this.addDock();
+    }
+    
+    // Add sponsor signage if this is a sponsored island
+    if (this.hasSignage) {
+      this.addSignage();
     }
   }
 
@@ -376,7 +396,35 @@ export class Island {
   }
 
   update(delta, time) {
-    // Any animation or updates can go here
+    // Animate the logo if it exists
+    if (this.logoContainer) {
+      this.animateLogo(delta, time);
+    }
+  }
+
+  animateLogo(delta, time) {
+    const container = this.logoContainer;
+    const data = container.userData.animationData;
+    
+    if (!data) return;
+    
+    // Rotate the logo
+    container.rotation.y += delta * data.rotationSpeed;
+    
+    // Make the logo bounce
+    const bounceOffset = Math.sin(time * data.bounceSpeed) * data.bounceHeight;
+    container.position.y = data.originalY || (container.position.y - bounceOffset);
+    
+    // Store the original Y position if not already stored
+    if (!data.originalY) {
+      data.originalY = container.position.y;
+    }
+    
+    // Pulse the glow effect
+    const glow = container.children.find(child => child.material && child.material.opacity !== undefined);
+    if (glow) {
+      glow.material.opacity = 0.1 + 0.1 * Math.sin(time * data.glowPulseSpeed);
+    }
   }
 
   get position() {
@@ -426,5 +474,333 @@ export class Island {
       position: this.dockPosition.clone(),
       direction: this.dockDirection.clone(),
     };
+  }
+
+  addSignage() {
+    // Create a 3D sign for the island
+    const signHeight = this.height + 15; // Position above the island
+    const signScale = this._radius * 0.1; // Scale relative to island size
+    
+    // Create a sign post
+    const postGeometry = new THREE.CylinderGeometry(0.5, 0.5, signHeight, 8);
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown wood color
+    const post = new THREE.Mesh(postGeometry, postMaterial);
+    post.position.set(0, signHeight / 2, 0);
+    
+    // Create the sign board
+    const signWidth = 8 * signScale;
+    const signBoardGeometry = new THREE.BoxGeometry(signWidth, 4 * signScale, 0.5);
+    const signBoardMaterial = new THREE.MeshStandardMaterial({ color: 0xEEEEEE });
+    const signBoard = new THREE.Mesh(signBoardGeometry, signBoardMaterial);
+    signBoard.position.set(0, signHeight, 0);
+    
+    // Create text for the sign using a canvas texture
+    if (this.customName) {
+      const textTexture = this.createTextTexture(this.customName);
+      const textMaterial = new THREE.MeshBasicMaterial({ 
+        map: textTexture, 
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+      
+      // Create a plane slightly in front of the sign board to show the text
+      const textGeometry = new THREE.PlaneGeometry(signWidth * 0.95, 3.8 * signScale);
+      const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+      textMesh.position.z = 0.3;
+      signBoard.add(textMesh);
+      
+      // Add a second text plane on the back side
+      const textMeshBack = new THREE.Mesh(textGeometry, textMaterial.clone());
+      textMeshBack.position.z = -0.3;
+      textMeshBack.rotation.y = Math.PI; // Rotate to face the opposite way
+      signBoard.add(textMeshBack);
+    }
+    
+    // If this is a sponsored island, add some special effects
+    if (this.isSponsored) {
+      // Add decorative details to the sign
+      const border = new THREE.BoxGeometry(signWidth + 0.5, 4.5 * signScale, 0.2);
+      const borderMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xFFD700, // Gold color for sponsored islands
+        metalness: 0.8,
+        roughness: 0.2
+      });
+      const borderMesh = new THREE.Mesh(border, borderMaterial);
+      borderMesh.position.z = -0.1; // Slightly behind the main sign
+      signBoard.add(borderMesh);
+      
+      // Add small spotlights to illuminate the sign
+      const spotLight1 = new THREE.PointLight(0xFFFF99, 1, 20);
+      spotLight1.position.set(signWidth/2, 2, 3);
+      const spotLight2 = new THREE.PointLight(0xFFFF99, 1, 20);
+      spotLight2.position.set(-signWidth/2, 2, 3);
+      
+      signBoard.add(spotLight1);
+      signBoard.add(spotLight2);
+      
+      // Add website URL to the sign if provided in sponsorData
+      if (this.sponsorData && this.sponsorData.url) {
+        const urlTexture = this.createTextTexture(this.sponsorData.url, 24, "#3366CC");
+        const urlMaterial = new THREE.MeshBasicMaterial({ 
+          map: urlTexture, 
+          transparent: true,
+          side: THREE.DoubleSide
+        });
+        
+        // Create a plane slightly below the name text
+        const urlGeometry = new THREE.PlaneGeometry(signWidth * 0.8, signScale);
+        const urlMesh = new THREE.Mesh(urlGeometry, urlMaterial);
+        urlMesh.position.y = -1.5 * signScale;
+        urlMesh.position.z = 0.31;
+        signBoard.add(urlMesh);
+        
+        // Add the URL to the back side as well
+        const urlMeshBack = new THREE.Mesh(urlGeometry, urlMaterial.clone());
+        urlMeshBack.position.y = -1.5 * signScale;
+        urlMeshBack.position.z = -0.31;
+        urlMeshBack.rotation.y = Math.PI; // Rotate to face the opposite way
+        signBoard.add(urlMeshBack);
+      }
+      
+      // Add custom 3D logo for Loki's Island
+      if (this.customName === "Loki's Island") {
+        this.addLokiLogo(signBoard, signWidth, signScale);
+      }
+    }
+    
+    // Add support beams for the sign
+    const beam1 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, signHeight * 0.3, 0.8),
+      postMaterial
+    );
+    beam1.position.set(signWidth * 0.3, signHeight * 0.85, 0);
+    beam1.rotation.z = -Math.PI * 0.1;
+    
+    const beam2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, signHeight * 0.3, 0.8),
+      postMaterial
+    );
+    beam2.position.set(-signWidth * 0.3, signHeight * 0.85, 0);
+    beam2.rotation.z = Math.PI * 0.1;
+    
+    // Add components to the main mesh
+    this.mesh.add(post);
+    this.mesh.add(signBoard);
+    this.mesh.add(beam1);
+    this.mesh.add(beam2);
+    
+    // Position the sign near the highest point of the island but not at the center
+    const signX = this._radius * 0.3;
+    const signZ = -this._radius * 0.3;
+    post.position.x = signX;
+    post.position.z = signZ;
+    signBoard.position.x = signX;
+    signBoard.position.z = signZ;
+    beam1.position.x = signX;
+    beam1.position.z = signZ;
+    beam2.position.x = signX;
+    beam2.position.z = signZ;
+    
+    // Rotate the sign to face outward from the center of the island
+    const angle = Math.atan2(signZ, signX) + Math.PI;
+    signBoard.rotation.y = angle;
+  }
+  
+  createTextTexture(text, fontSize = 36, color = "#000000", backgroundColor = "rgba(255,255,255,0)") {
+    // Create canvas to draw text
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size
+    canvas.width = 512;
+    canvas.height = 128;
+    
+    // Clear canvas
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw text
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    
+    return texture;
+  }
+  
+  // Static method to create a sponsored island for a specific advertiser
+  static createSponsoredIsland(options) {
+    // Ensure options has the required properties
+    options = options || {};
+    options.isSponsored = true;
+    
+    // Create more interesting sponsored islands
+    const sponsoredColor = options.color || new THREE.Color(0x7CB342); // Slightly different green
+    options.color = sponsoredColor;
+    
+    // Mark terrain as smoother and more pleasant
+    options.detail = options.detail || 1.5; // Less noisy terrain
+    
+    // Create larger vegetation for sponsored islands to make them stand out
+    const originalVegetation = options.vegetation;
+    options.vegetation = false; // We'll add custom vegetation later
+    
+    // Create the island instance
+    const island = new Island(options);
+    
+    // Add custom vegetation if original options had vegetation enabled
+    if (originalVegetation !== false) {
+      island.addEnhancedVegetation();
+    }
+    
+    return island;
+  }
+  
+  addEnhancedVegetation() {
+    // Add more interesting, lusher vegetation for sponsored islands
+    
+    // Use the existing vegetation method first
+    this.addVegetation();
+    
+    // Add additional special trees or vegetation specific to sponsored islands
+    
+    // Add some palm trees (larger than normal)
+    const numSpecialTrees = Math.floor(this._radius / 10);
+    
+    for (let i = 0; i < numSpecialTrees; i++) {
+      // Position trees in a circle
+      const angle = (i / numSpecialTrees) * Math.PI * 2;
+      const distance = this._radius * 0.7;
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      
+      // Create a special palm tree
+      const trunkHeight = 8 + Math.random() * 4;
+      const trunkRadius = 0.4 + Math.random() * 0.2;
+      
+      const trunkGeometry = new THREE.CylinderGeometry(
+        trunkRadius, trunkRadius * 1.2, trunkHeight, 8
+      );
+      const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+      
+      // Position trunk
+      trunk.position.set(x, this.getHeightAt(x, z) + trunkHeight / 2, z);
+      
+      // Create leaves as a cone
+      const leavesRadius = 3 + Math.random() * 2;
+      const leavesGeometry = new THREE.ConeGeometry(leavesRadius, 4, 8);
+      const leavesMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x2E7D32, 
+        flatShading: true 
+      });
+      const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+      
+      // Position leaves at the top of the trunk
+      leaves.position.y = trunkHeight / 2 + 1;
+      trunk.add(leaves);
+      
+      // Add some randomness to the trunk angle
+      trunk.rotation.x = (Math.random() - 0.5) * 0.2;
+      trunk.rotation.z = (Math.random() - 0.5) * 0.2;
+      
+      // Add to island mesh
+      this.mesh.add(trunk);
+    }
+  }
+
+  // Special method to add Loki's logo to the island
+  addLokiLogo(parent, width, scale) {
+    // Create a container for the 3D logo that floats above the sign
+    const logoContainer = new THREE.Group();
+    logoContainer.position.set(0, 8 * scale, 0);
+    
+    // Create a stylized "L" shape using custom geometry
+    const createLShape = () => {
+      const shape = new THREE.Shape();
+      shape.moveTo(0, 0);
+      shape.lineTo(0, 3);
+      shape.lineTo(0.5, 3);
+      shape.lineTo(0.5, 0.5);
+      shape.lineTo(2, 0.5);
+      shape.lineTo(2, 0);
+      shape.lineTo(0, 0);
+      
+      const extrudeSettings = {
+        steps: 1,
+        depth: 0.3,
+        bevelEnabled: true,
+        bevelThickness: 0.1,
+        bevelSize: 0.1,
+        bevelSegments: 3
+      };
+      
+      return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    };
+    
+    // Create a rotating logo with "L" for Loki
+    const logoGeometry = createLShape();
+    const logoMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x00A8FF,
+      metalness: 0.8,
+      roughness: 0.2,
+      emissive: 0x004080,
+      emissiveIntensity: 0.5
+    });
+    
+    const logo = new THREE.Mesh(logoGeometry, logoMaterial);
+    logo.scale.set(2 * scale, 2 * scale, 2 * scale);
+    logo.position.set(-width/4, 0, 0);
+    
+    // Add a glowing effect around the logo
+    const glowGeometry = new THREE.SphereGeometry(3 * scale, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00A8FF,
+      transparent: true,
+      opacity: 0.2
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    
+    // Create a decorative circle platform
+    const platformGeometry = new THREE.CylinderGeometry(5 * scale, 5 * scale, 0.5, 32);
+    const platformMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.9,
+      roughness: 0.1
+    });
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.y = -1.5 * scale;
+    
+    // Add a small point light to illuminate the logo
+    const logoLight = new THREE.PointLight(0x00A8FF, 2, 20);
+    logoLight.position.set(0, 2 * scale, 5 * scale);
+    
+    // Add elements to the logo container
+    logoContainer.add(logo);
+    logoContainer.add(glow);
+    logoContainer.add(platform);
+    logoContainer.add(logoLight);
+    
+    // Add animation data to the logo container
+    logoContainer.userData.animationData = {
+      rotationSpeed: 0.5,
+      bounceHeight: 0.5 * scale,
+      bounceSpeed: 1.5,
+      glowPulseSpeed: 2.0,
+      startTime: Date.now() / 1000
+    };
+    
+    // Add update method for animations
+    this.logoContainer = logoContainer;
+    
+    // Add the logo container to the parent
+    parent.add(logoContainer);
+    
+    return logoContainer;
   }
 }

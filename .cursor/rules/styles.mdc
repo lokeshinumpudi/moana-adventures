@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- Do not add css styling inside javascript files such as .js, .jsx or .ts, .tsx ending files
+- You can use any available .css files or check the project for available styling files
+- similarly the same rule applies for html add it in .html files
