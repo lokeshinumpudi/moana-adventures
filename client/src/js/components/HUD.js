@@ -34,6 +34,9 @@ export class HUD {
 
     // Create time of day display
     this.createTimeDisplay();
+    
+    // Create settings menu
+    this.createSettingsMenu();
 
     // Validate that required elements exist
     if (!this.container) {
@@ -134,6 +137,272 @@ export class HUD {
     });
     
     this.container.appendChild(debugButton);
+  }
+
+  createSettingsMenu() {
+    // Create settings button
+    const settingsButton = document.createElement('div');
+    settingsButton.className = 'settings-button';
+    settingsButton.innerHTML = '<i>⚙️</i>'; // Gear icon
+    settingsButton.title = 'Game Settings';
+    this.container.appendChild(settingsButton);
+    
+    // Create settings menu
+    const settingsMenu = document.createElement('div');
+    settingsMenu.className = 'settings-menu';
+    
+    // Create menu header
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+    
+    const title = document.createElement('div');
+    title.className = 'settings-title';
+    title.textContent = 'Game Controls';
+    header.appendChild(title);
+    
+    const closeButton = document.createElement('button');
+    closeButton.className = 'settings-close';
+    closeButton.innerHTML = '&times;'; // × symbol
+    closeButton.title = 'Close';
+    header.appendChild(closeButton);
+    
+    settingsMenu.appendChild(header);
+    
+    // Create tabs
+    const tabs = document.createElement('div');
+    tabs.className = 'settings-tabs';
+    
+    const desktopTab = document.createElement('button');
+    desktopTab.className = 'settings-tab active';
+    desktopTab.textContent = 'Desktop Controls';
+    desktopTab.dataset.tab = 'desktop';
+    tabs.appendChild(desktopTab);
+    
+    const mobileTab = document.createElement('button');
+    mobileTab.className = 'settings-tab';
+    mobileTab.textContent = 'Mobile Controls';
+    mobileTab.dataset.tab = 'mobile';
+    tabs.appendChild(mobileTab);
+    
+    settingsMenu.appendChild(tabs);
+    
+    // Create tab content containers
+    const desktopContent = document.createElement('div');
+    desktopContent.className = 'settings-tab-content active';
+    desktopContent.id = 'desktop-controls';
+    
+    const mobileContent = document.createElement('div');
+    mobileContent.className = 'settings-tab-content';
+    mobileContent.id = 'mobile-controls';
+    
+    // Populate desktop controls
+    desktopContent.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section-title">Movement</div>
+        <table class="controls-table">
+          <tr>
+            <td>Move Forward</td>
+            <td><span class="key-combo">W</span> or <span class="key-combo">↑</span></td>
+          </tr>
+          <tr>
+            <td>Move Backward</td>
+            <td><span class="key-combo">S</span> or <span class="key-combo">↓</span></td>
+          </tr>
+          <tr>
+            <td>Turn Left</td>
+            <td><span class="key-combo">A</span> or <span class="key-combo">←</span></td>
+          </tr>
+          <tr>
+            <td>Turn Right</td>
+            <td><span class="key-combo">D</span> or <span class="key-combo">→</span></td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Combat</div>
+        <table class="controls-table">
+          <tr>
+            <td>Fire Left Cannon</td>
+            <td><span class="key-combo">Q</span></td>
+          </tr>
+          <tr>
+            <td>Fire Right Cannon</td>
+            <td><span class="key-combo">E</span></td>
+          </tr>
+          <tr>
+            <td>Fire Front Cannon</td>
+            <td><span class="key-combo">F</span></td>
+          </tr>
+          <tr>
+            <td>Fire Left Machine Gun</td>
+            <td><span class="key-combo">Z</span></td>
+          </tr>
+          <tr>
+            <td>Fire Right Machine Gun</td>
+            <td><span class="key-combo">X</span></td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Camera</div>
+        <table class="controls-table">
+          <tr>
+            <td>Toggle Camera View</td>
+            <td><span class="key-combo">C</span></td>
+          </tr>
+          <tr>
+            <td>Camera Presets</td>
+            <td><span class="key-combo">1</span> <span class="key-combo">2</span> <span class="key-combo">3</span> <span class="key-combo">4</span></td>
+          </tr>
+          <tr>
+            <td>Orbit Camera</td>
+            <td>Hold <span class="key-combo">Right Mouse</span> and drag</td>
+          </tr>
+          <tr>
+            <td>Zoom Camera</td>
+            <td><span class="key-combo">Mouse Wheel</span></td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Other</div>
+        <table class="controls-table">
+          <tr>
+            <td>Dock / Explore Island</td>
+            <td><span class="key-combo">F</span> (near island dock)</td>
+          </tr>
+          <tr>
+            <td>Toggle Audio</td>
+            <td><span class="key-combo">M</span></td>
+          </tr>
+          <tr>
+            <td>Toggle Debug Mode</td>
+            <td><span class="key-combo">~</span></td>
+          </tr>
+        </table>
+      </div>
+    `;
+    
+    // Populate mobile controls
+    mobileContent.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section-title">Movement</div>
+        <table class="controls-table">
+          <tr>
+            <td>Move Ship</td>
+            <td>Use the virtual joystick at the bottom center</td>
+          </tr>
+          <tr>
+            <td>Forward / Backward</td>
+            <td>Push joystick up / down</td>
+          </tr>
+          <tr>
+            <td>Turn Left</td>
+            <td>Push joystick left or tap <span class="key-combo">LEFT</span> button</td>
+          </tr>
+          <tr>
+            <td>Turn Right</td>
+            <td>Push joystick right or tap <span class="key-combo">RIGHT</span> button</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Combat</div>
+        <table class="controls-table">
+          <tr>
+            <td>Fire Front Cannon</td>
+            <td>Tap <span class="key-combo">FRONT</span> button</td>
+          </tr>
+          <tr>
+            <td>Fire Side Cannons</td>
+            <td>Double-tap <span class="key-combo">LEFT</span> or <span class="key-combo">RIGHT</span> buttons</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Navigation</div>
+        <table class="controls-table">
+          <tr>
+            <td>View Map</td>
+            <td>The minimap is in the top-right corner</td>
+          </tr>
+          <tr>
+            <td>Dock at Island</td>
+            <td>Approach dock and tap the dock indicator when it appears</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-section-title">Tips for Mobile</div>
+        <ul style="padding-left: 20px; margin-top: 5px;">
+          <li>Use two fingers to pinch zoom the camera view</li>
+          <li>Rotate the device for a different perspective</li>
+          <li>Tap the minimap to enlarge it temporarily</li>
+          <li>Double-tap the screen to toggle fullscreen</li>
+        </ul>
+      </div>
+    `;
+    
+    // Add content to settings menu
+    settingsMenu.appendChild(desktopContent);
+    settingsMenu.appendChild(mobileContent);
+    
+    // Add footer
+    const footer = document.createElement('div');
+    footer.className = 'settings-footer';
+    footer.textContent = 'Game version 1.0.0 - Hold M to mute/unmute audio';
+    settingsMenu.appendChild(footer);
+    
+    // Add menu to UI
+    this.container.appendChild(settingsMenu);
+    
+    // Store references
+    this.settingsButton = settingsButton;
+    this.settingsMenu = settingsMenu;
+    
+    // Add event listeners
+    settingsButton.addEventListener('click', () => {
+      settingsMenu.classList.toggle('settings-visible');
+    });
+    
+    closeButton.addEventListener('click', () => {
+      settingsMenu.classList.remove('settings-visible');
+    });
+    
+    // Tab switching functionality
+    const allTabs = tabs.querySelectorAll('.settings-tab');
+    allTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Deactivate all tabs
+        allTabs.forEach(t => t.classList.remove('active'));
+        
+        // Hide all content
+        const allContent = settingsMenu.querySelectorAll('.settings-tab-content');
+        allContent.forEach(c => c.classList.remove('active'));
+        
+        // Activate clicked tab
+        tab.classList.add('active');
+        
+        // Show corresponding content
+        const targetContent = tab.dataset.tab === 'desktop' ? desktopContent : mobileContent;
+        targetContent.classList.add('active');
+      });
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', (event) => {
+      if (!settingsMenu.contains(event.target) && 
+          !settingsButton.contains(event.target) && 
+          settingsMenu.classList.contains('settings-visible')) {
+        settingsMenu.classList.remove('settings-visible');
+      }
+    });
   }
 
   update(data = {}) {
@@ -470,7 +739,7 @@ export class HUD {
           if (!isMobile || distance < mapRange * 0.5) {
             const islandLabel = document.createElement('div');
             islandLabel.className = 'minimap-label island-label';
-            islandLabel.textContent = 'Island';
+            islandLabel.textContent = island.name || 'Island';
             islandLabel.style.left = `${radarX}%`;
             islandLabel.style.top = `${radarZ + 5}%`;
             this.blipsContainer.appendChild(islandLabel);

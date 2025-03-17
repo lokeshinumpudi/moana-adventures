@@ -177,14 +177,18 @@ export class Ship {
 
     // Update position based on speed and direction
     if (Math.abs(this.speed) > 0.1 && !this.isDocked) {
-      // Calculate movement direction based on ship rotation
-      this.direction.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
-
-      // Calculate velocity
-      this.velocity.copy(this.direction).multiplyScalar(this.speed * delta);
-
+      // Calculate forward direction based on ship's rotation
+      const forward = new THREE.Vector3(0, 0, 1);
+      forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      
+      // Update velocity based on forward direction and speed
+      this.velocity.copy(forward).multiplyScalar(this.speed * delta);
+      
       // Update position
-      this.mesh.position.add(this.velocity);
+      const newPosition = this.mesh.position.clone().add(this.velocity);
+      
+      // Update the ship's position
+      this.mesh.position.copy(newPosition);
     }
 
     // Update wave effect

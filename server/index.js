@@ -60,6 +60,48 @@ const WORLD_CONFIG = {
   }
 };
 
+// Advertising configuration
+const ADVERTISED_ISLANDS = {
+  // Premium positions in the world - adjusted to avoid spawn point
+  positions: {
+    primaryNorth: { x: 0, y: 0, z: 150 },  // Most visible position, just north of spawn
+    northEast: { x: 200, y: 0, z: 200 },
+    northWest: { x: -200, y: 0, z: 200 },
+    southEast: { x: 200, y: 0, z: -200 },
+    southWest: { x: -200, y: 0, z: -200 },
+    north: { x: 0, y: 0, z: 300 },
+    east: { x: 300, y: 0, z: 0 },
+    south: { x: 0, y: 0, z: -300 },
+    west: { x: -300, y: 0, z: 0 }
+  },
+  
+  // List of active advertisers
+  advertisers: [
+    {
+      id: 'lokis_island',
+      name: "Loki's Island",
+      advertiser: 'lokeshinumpudi.com',
+      position: 'primaryNorth', // Changed from center to primaryNorth
+      radius: 70, // Using maxRadius
+      height: 25, // Using maxHeight
+      hasDock: true,
+      dockAngle: Math.PI, // Point dock southward towards spawn
+      vegetation: true,
+      customModel: null,
+      priority: 1
+    }
+    // Add more advertisers here in the same format
+    // Example:
+    // {
+    //   id: 'another_island',
+    //   name: "Another Company Island",
+    //   advertiser: 'company.com',
+    //   position: 'northEast',
+    //   ...
+    // }
+  ]
+};
+
 // World storage
 const worldData = {
   islands: [],
@@ -80,6 +122,13 @@ function generateRandomPosition() {
 
 // Check if a position is far enough from existing objects
 function isPositionValid(position, existingObjects, minDistance) {
+  // Check distance from spawn point (0,0,0)
+  const spawnDistance = Math.sqrt(position.x * position.x + position.z * position.z);
+  if (spawnDistance < 100) { // Keep 100 units clear around spawn
+    return false;
+  }
+
+  // Check distance from existing objects
   for (const obj of existingObjects) {
     const dx = position.x - obj.position.x;
     const dz = position.z - obj.position.z;
@@ -95,7 +144,49 @@ function isPositionValid(position, existingObjects, minDistance) {
 function generateIslands() {
   const { count, minDistance, minRadius, maxRadius, minHeight, maxHeight } = WORLD_CONFIG.islands;
   
-  for (let i = 0; i < count; i++) {
+  // First create all advertised islands
+  ADVERTISED_ISLANDS.advertisers
+    .sort((a, b) => b.priority - a.priority) // Sort by priority
+    .forEach(advertiser => {
+      const position = ADVERTISED_ISLANDS.positions[advertiser.position] || ADVERTISED_ISLANDS.positions.center;
+      
+      const island = {
+        id: advertiser.id,
+        name: advertiser.name,
+        advertiser: advertiser.advertiser,
+        position: { ...position }, // Clone position to avoid reference issues
+        radius: advertiser.radius || maxRadius,
+        height: advertiser.height || maxHeight,
+        hasDock: advertiser.hasDock !== false,
+        dockAngle: advertiser.dockAngle || Math.PI / 4,
+        vegetation: advertiser.vegetation !== false,
+        customModel: advertiser.customModel || null
+      };
+
+      // Calculate dock position
+      if (island.hasDock) {
+        const dockDirection = {
+          x: Math.sin(island.dockAngle),
+          z: Math.cos(island.dockAngle)
+        };
+        
+        island.dockPosition = {
+          x: position.x + dockDirection.x * (island.radius + 20),
+          y: 0,
+          z: position.z + dockDirection.z * (island.radius + 20)
+        };
+        
+        island.dockDirection = dockDirection;
+      }
+
+      worldData.islands.push(island);
+    });
+
+  // Calculate how many regular islands to generate
+  const remainingCount = Math.max(0, count - ADVERTISED_ISLANDS.advertisers.length);
+
+  // Generate remaining random islands
+  for (let i = 0; i < remainingCount; i++) {
     let position;
     let isValid = false;
     let attempts = 0;
@@ -107,18 +198,19 @@ function generateIslands() {
       attempts++;
     }
     
-    // Create island
+    // Create regular island
     const island = {
       id: `island_${i}`,
+      name: `Island #${i + 1}`,
       position: position,
       radius: minRadius + Math.random() * (maxRadius - minRadius),
       height: minHeight + Math.random() * (maxHeight - minHeight),
-      hasDock: Math.random() > 0.2, // 80% chance of having a dock
-      dockAngle: Math.random() * Math.PI * 2, // Random angle for dock
+      hasDock: Math.random() > 0.2,
+      dockAngle: Math.random() * Math.PI * 2,
       vegetation: true
     };
     
-    // Calculate dock position based on radius and angle
+    // Calculate dock position
     if (island.hasDock) {
       const dockDirection = {
         x: Math.sin(island.dockAngle),
@@ -137,7 +229,7 @@ function generateIslands() {
     worldData.islands.push(island);
   }
   
-  console.log(`Generated ${worldData.islands.length} islands`);
+  console.log(`Generated ${worldData.islands.length} islands (${ADVERTISED_ISLANDS.advertisers.length} advertised)`);
 }
 
 // Generate collectibles on islands
