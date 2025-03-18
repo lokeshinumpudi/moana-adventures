@@ -8,13 +8,23 @@ const app = express();
 app.use(cors());
 
 const httpServer = createServer(app);
+
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? ["https://pirates.lokeshinumpudi.com","https://moana-adventures.vercel.app"]
-      : ["http://localhost:5174", "http://localhost:5173","*"],
-    methods: ["GET", "POST"]
-  }
+      ? ["https://pirates.lokeshinumpudi.com","https://moana-adventures.vercel.app"] // Restrictive CORS in production limits attack surface
+      : ["http://localhost:5174", "http://localhost:5173"], // Removed wildcard (*) in development
+    methods: ["GET", "POST"] // Only allow essential HTTP methods
+  },
+  // Additional hardening measures:
+  transports: ['websocket'], // Force WebSocket transport only (no HTTP long-polling)
+  perMessageDeflate: {
+    threshold: 1024, // Don't compress small messages
+    zlibDeflateOptions: {
+      chunkSize: 16 * 1024
+    }
+  },
+  maxHttpBufferSize: 1e6 // Limit message size to 1MB
 });
 
 // Initialize TimeManager
