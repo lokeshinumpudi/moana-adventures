@@ -26,6 +26,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.5.0",
     "cannon-es": "^0.20.0",
     "socket.io-client": "^4.8.1",
     "three": "^0.174.0",

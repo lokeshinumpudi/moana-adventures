@@ -1,8 +1,10 @@
 import './style.css';
 import './ui/hud.css'; // Import HUD CSS after main CSS so it takes precedence
 import { Game } from './js/Game';
+import { inject } from "@vercel/analytics"
 
 document.addEventListener('DOMContentLoaded', async () => {
+  inject();
   // Create container for the game
   const container = document.querySelector('#game-container');
 
