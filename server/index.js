@@ -11,7 +11,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? "https://moana-adventures.vercel.app"  // Update this with your Vercel domain
+      ? "https://moana-adventures.vercel.app"  
       : ["http://localhost:5174", "http://localhost:5173","*"],
     methods: ["GET", "POST"]
   }
