@@ -31,6 +31,7 @@
     "cannon-es": "^0.20.0",
     "socket.io-client": "^4.8.1",
     "three": "^0.174.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "vite-plugin-remove-console": "^2.2.0"
   }
 }

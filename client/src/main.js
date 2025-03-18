@@ -2,9 +2,7 @@ import './style.css';
 import './ui/hud.css'; // Import HUD CSS after main CSS so it takes precedence
 import { Game } from './js/Game';
 import { inject } from "@vercel/analytics"
-import { injectSpeedInsights } from '@vercel/speed-insights';
 
-injectSpeedInsights();
 
 document.addEventListener('DOMContentLoaded', async () => {
   inject();

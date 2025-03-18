@@ -103,7 +103,7 @@ export class SocketManager {
     // Add ping handler
     this.socket.on('pong', () => {
       this.lastPing = Date.now() - this.pingStartTime;
-      console.log(`Current ping: ${this.lastPing}ms`);
+      
 
       // Schedule next ping
       setTimeout(() => {
