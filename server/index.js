@@ -16,8 +16,6 @@ const io = new Server(httpServer, {
       : ["http://localhost:5174", "http://localhost:5173"], // Removed wildcard (*) in development
     methods: ["GET", "POST"] // Only allow essential HTTP methods
   },
-  // Additional hardening measures:
-  transports: ['websocket'], // Force WebSocket transport only (no HTTP long-polling)
   perMessageDeflate: {
     threshold: 1024, // Don't compress small messages
     zlibDeflateOptions: {
