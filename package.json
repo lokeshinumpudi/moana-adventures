@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "yarn workspaces run dev",
-    "build:client": "yarn workspace client build",
+    "build:client": "NODE_ENV=production yarn workspace client build",
     "build": "NODE_ENV=production yarn workspace client build",
     "start:client": "yarn workspace client dev",
     "start:server": "yarn workspace server start",
