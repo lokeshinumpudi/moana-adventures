@@ -2,6 +2,13 @@
 
 A 3D browser-based racing and combat game built with Three.js featuring Moana sailing a Polynesian-inspired ship across a dynamic ocean, battling obstacles, and racing to the finish line.
 
+##  Product Preview
+<p align="center">
+  <img src="https://github.com/lokeshinumpudi/moana-adventures/blob/release/moana-adventures.jpeg" alt="Moana adventures game" width="350"/>
+  <br/>
+  <em>Moana adventures</em>
+</p>
+
 ## Project Structure
 
 ```
