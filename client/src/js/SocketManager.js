@@ -102,6 +102,17 @@ export class SocketManager {
       }
     });
 
+    // Wind state from server — single source of truth for direction + strength.
+    // Stored on `game.wind` so Ship physics, the masthead flag, and ambient
+    // ribbon particles can all read the same value.
+    this.socket.on('wind:state', (data) => {
+      this.game.wind = {
+        direction: data.direction,
+        strength: data.strength,
+        serverTime: data.serverTime,
+      };
+    });
+
     // Add ping handler
     this.socket.on('pong', () => {
       this.lastPing = Date.now() - this.pingStartTime;

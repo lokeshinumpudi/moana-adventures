@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Projectile } from './Projectile.js';
+import { buildShipModel } from './ShipModel.js';
+import { sailEffectiveness } from './WindIndicator.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class Ship {
@@ -56,6 +58,14 @@ export class Ship {
     this.maxHealth = 100;
     this.health = 100;
     this.originalColor = new THREE.Color(0x8B4513);
+
+    // Visual feel — banking on hard turns + recoil offset that decays
+    this.turnInput = 0; // -1..1 smoothed
+    this.bankAngle = 0; // smoothed roll target
+    this.recoilOffset = 0; // local-Z (back) push that decays each tick
+    this._wakeAccumulator = 0;
+    this._tmpForward = new THREE.Vector3();
+    this._tmpRight = new THREE.Vector3();
   }
 
   async init() {
@@ -64,77 +74,17 @@ export class Ship {
   }
 
   createBasicShip() {
-    // Create the hull (main body of the ship)
-    const hullGeometry = new THREE.BoxGeometry(3, 1, 7);
-    const hullMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8B4513,
-      roughness: 0.7,
-      metalness: 0.2,
-    });
-    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
-    hull.castShadow = true;
-    hull.receiveShadow = true;
-    this.hull = hull;
-    this.mesh.add(hull);
+    // Stylised low-poly model — see components/ShipModel.js
+    const model = buildShipModel({ hullColor: this.originalColor });
+    this.mesh.add(model);
 
-    // Create a mast
-    const mastGeometry = new THREE.CylinderGeometry(0.1, 0.1, 4, 8);
-    const mastMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8B4513,
-      roughness: 0.8,
-    });
-    const mast = new THREE.Mesh(mastGeometry, mastMaterial);
-    mast.position.set(0, 2.5, 0);
-    mast.castShadow = true;
-    this.mesh.add(mast);
-
-    // Create a sail
-    const sailGeometry = new THREE.PlaneGeometry(3, 3);
-    const sailMaterial = new THREE.MeshStandardMaterial({
-      color: 0xF5F5DC,
-      side: THREE.DoubleSide,
-      roughness: 0.5,
-    });
-    const sail = new THREE.Mesh(sailGeometry, sailMaterial);
-    sail.position.set(0, 2.5, 0);
-    sail.rotation.y = Math.PI / 2;
-    sail.castShadow = true;
-    this.mesh.add(sail);
-
-    // Create simple cannons
-    this.createCannons();
-
-    // Store original color for damage effect
-    this.originalColor = hullMaterial.color.clone();
-
-    console.log('Basic ship created', this.mesh);
-  }
-
-  createCannons() {
-    // Create cannon geometry
-    const cannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
-    cannonGeometry.rotateZ(Math.PI / 2);
-    const cannonMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-
-    // Left cannon
-    this.leftCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
-    this.leftCannon.position.set(1.7, 0.5, 0);
-    this.leftCannon.castShadow = true;
-    this.mesh.add(this.leftCannon);
-
-    // Right cannon
-    this.rightCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
-    this.rightCannon.position.set(-1.7, 0.5, 0);
-    this.rightCannon.castShadow = true;
-    this.mesh.add(this.rightCannon);
-
-    // Front cannon
-    const frontCannonGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
-    frontCannonGeometry.rotateX(Math.PI / 2);
-    this.frontCannon = new THREE.Mesh(frontCannonGeometry, cannonMaterial);
-    this.frontCannon.position.set(0, 0.5, 2);
-    this.frontCannon.castShadow = true;
-    this.mesh.add(this.frontCannon);
+    // Wire references the rest of Ship expects
+    this.hull = model.userData.hull;
+    this.leftCannon = model.userData.leftCannon;
+    this.rightCannon = model.userData.rightCannon;
+    this.frontCannon = model.userData.frontCannon;
+    this.flagPivot = model.userData.flagPivot;
+    this.sailMesh = model.userData.sail;
   }
 
   update(delta, inputManager = null) {
@@ -165,34 +115,84 @@ export class Ship {
           }
         }
 
-        // Handle rotation
-        if (inputManager.keys['a'] || inputManager.keys['ArrowLeft']) {
-          this.mesh.rotation.y += this.rotationSpeed * delta;
-        }
-        if (inputManager.keys['d'] || inputManager.keys['ArrowRight']) {
-          this.mesh.rotation.y -= this.rotationSpeed * delta;
+        // Smoothed turn input → drives both yaw and banking visual
+        let rawTurn = 0;
+        if (inputManager.keys['a'] || inputManager.keys['ArrowLeft']) rawTurn += 1;
+        if (inputManager.keys['d'] || inputManager.keys['ArrowRight']) rawTurn -= 1;
+        // Lerp toward the target so quick taps don't snap-bank
+        this.turnInput += (rawTurn - this.turnInput) * Math.min(1, delta * 6);
+
+        if (this.turnInput !== 0) {
+          // Heavier ship → harder to turn at high speed
+          const speedFactor = 1 - Math.min(0.4, Math.abs(this.speed) / this.maxSpeed * 0.4);
+          this.mesh.rotation.y += this.turnInput * this.rotationSpeed * speedFactor * delta;
         }
       }
     }
 
     // Update position based on speed and direction
     if (Math.abs(this.speed) > 0.1 && !this.isDocked) {
-      // Calculate forward direction based on ship's rotation
-      const forward = new THREE.Vector3(0, 0, 1);
-      forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
-      
-      // Update velocity based on forward direction and speed
-      this.velocity.copy(forward).multiplyScalar(this.speed * delta);
-      
-      // Update position
-      const newPosition = this.mesh.position.clone().add(this.velocity);
-      
-      // Update the ship's position
-      this.mesh.position.copy(newPosition);
+      // Reuse vectors — see CLAUDE.md: don't allocate per frame
+      this._tmpForward.set(0, 0, 1).applyAxisAngle(this._upAxis(), this.mesh.rotation.y);
+      // Sail-into-the-wind = drag, downwind = boost (server-authoritative wind)
+      const windEff = sailEffectiveness(this.mesh.rotation.y, this.game && this.game.wind);
+      this.velocity.copy(this._tmpForward).multiplyScalar(this.speed * delta * windEff);
+
+      // Apply recoil along the forward axis. recoilOffset is negative so
+      // this nudges the ship backward; the magnitude decays each tick.
+      if (Math.abs(this.recoilOffset) > 0.001) {
+        this.mesh.position.addScaledVector(this._tmpForward, this.recoilOffset * delta * 8);
+        this.recoilOffset *= Math.max(0, 1 - delta * 6);
+      }
+
+      this.mesh.position.add(this.velocity);
+    } else if (Math.abs(this.recoilOffset) > 0.001) {
+      // Allow recoil to settle even when stationary
+      this._tmpForward.set(0, 0, 1).applyAxisAngle(this._upAxis(), this.mesh.rotation.y);
+      this.mesh.position.addScaledVector(this._tmpForward, this.recoilOffset * delta * 8);
+      this.recoilOffset *= Math.max(0, 1 - delta * 6);
     }
 
-    // Update wave effect
+    // Wake spray when moving fast
+    this._spawnWake(delta);
+
+    // Update wave effect (also applies banking)
     this.updateWaveEffect(delta);
+  }
+
+  _upAxis() {
+    if (!this.__upAxis) this.__upAxis = new THREE.Vector3(0, 1, 0);
+    return this.__upAxis;
+  }
+
+  /**
+   * Pump a small backwards-along-forward offset that decays in update().
+   * Negative because we add it along the *forward* unit vector — negative
+   * along forward = backward, which is what recoil should do.
+   */
+  applyRecoil() {
+    // Choose the more-negative of (existing, -0.35) so repeated shots stack
+    if (this.recoilOffset > -0.35) this.recoilOffset = -0.35;
+  }
+
+  _spawnWake(delta) {
+    if (!this.game || !this.game.particleSystem || this.isDocked) return;
+    const speedAbs = Math.abs(this.speed);
+    if (speedAbs < this.maxSpeed * 0.25) return;
+
+    // Throttle so we don't drown the particle pool
+    this._wakeAccumulator += delta;
+    const interval = 0.08; // ~12 Hz wake puffs
+    if (this._wakeAccumulator < interval) return;
+    this._wakeAccumulator = 0;
+
+    // Spawn behind the ship using cached temps
+    this._tmpForward.set(0, 0, 1).applyAxisAngle(this._upAxis(), this.mesh.rotation.y);
+    const sternOffset = -3.5;
+    const wakePos = this.mesh.position.clone()
+      .addScaledVector(this._tmpForward, sternOffset);
+    wakePos.y = 0.05;
+    this.game.particleSystem.createWaterSplash(wakePos);
   }
 
   calculateWaveHeight(x, z, time) {
@@ -467,21 +467,28 @@ export class Ship {
     if (this.isDocked) return;
 
     // Make the ship float on water
-    // Calculate wave height based on position and time
     const time = Date.now() * 0.001;
     const waveHeight = this.calculateWaveHeight(this.mesh.position.x, this.mesh.position.z, time);
-
-    // Set the ship's y position to float on the water
     this.mesh.position.y = waveHeight;
 
-    // Apply gentle rocking based on waves
+    // Wave-driven pitch/roll
     const pitchAmount = Math.sin(time * 0.5 + this.mesh.position.x * 0.02) * 0.05;
-    const rollAmount = Math.sin(time * 0.7 + this.mesh.position.z * 0.02) * 0.05;
+    const wavePitch = Math.sin(time * 0.7 + this.mesh.position.z * 0.02) * 0.05;
 
-    // Apply pitch and roll while preserving yaw (y-axis rotation)
+    // Banking: lean into turns proportional to turn input + speed
+    const targetBank = -this.turnInput * Math.min(1, Math.abs(this.speed) / this.maxSpeed) * 0.45;
+    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, delta * 4);
+
     const yawRotation = this.mesh.rotation.y;
     this.mesh.rotation.x = pitchAmount;
-    this.mesh.rotation.z = rollAmount;
+    this.mesh.rotation.z = wavePitch + this.bankAngle;
     this.mesh.rotation.y = yawRotation;
+
+    // Point the masthead flag downwind (in ship-local frame so the staff
+    // stays attached to the mast). flagPivot may be undefined briefly if
+    // model loading races the first frame.
+    if (this.flagPivot && this.game && this.game.wind) {
+      this.flagPivot.rotation.y = this.game.wind.direction - yawRotation;
+    }
   }
 }

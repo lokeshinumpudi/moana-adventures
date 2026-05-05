@@ -10,6 +10,7 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const TimeManager = require('./src/timeManager');
+const WindManager = require('./src/windManager');
 const logger = require('./src/logger');
 
 const corsOrigins = (process.env.CORS_ORIGINS || '')
@@ -28,8 +29,9 @@ const io = new Server(httpServer, {
   }
 });
 
-// Initialize TimeManager
+// Initialize TimeManager + WindManager (server-authoritative environment state)
 const timeManager = new TimeManager(io);
+const windManager = new WindManager(io);
 
 // Store connected players
 const players = new Map();

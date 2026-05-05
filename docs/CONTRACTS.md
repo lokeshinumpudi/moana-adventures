@@ -46,6 +46,7 @@ Server-only. Used for health checks (e.g., `curl $VITE_SERVER_URL/status`).
 | `collectible:removed`  | Anyone picked up a collectible                     | `{ id, playerId }`                                                                                            |
 | `explorer:state`       | Another player's explorer (on-foot mode) updated   | `{ playerId, isActive, position: Vec3, rotation: Vec3, islandId, timestamp }`                                 |
 | `time:response`        | Reply to `time:request`                            | `{ serverTime: number, startTime: number }` (ms since epoch)                                                  |
+| `wind:state`           | On connect + every ~5 s; reply to `wind:request`   | `{ direction: number, strength: number, serverTime: number }` — `direction` is world-frame radians (0 = +Z, π/2 = +X), `strength` ∈ [0, 1] |
 | `pong`                 | Reply to `ping`                                    | _(no payload)_                                                                                                |
 
 > **`reconcile`, `input:ack`, `players:batch`** are subscribed to by the client (`SocketManager.setupSocketListeners`) but are **not currently emitted by the server**. They are wired for future server-authoritative reconciliation. Do not rely on them today.
@@ -62,6 +63,7 @@ Server-only. Used for health checks (e.g., `curl $VITE_SERVER_URL/status`).
 | `explorer:state`       | While on foot                              | `{ playerId, isActive, position, rotation, islandId, timestamp }`                                    |
 | `collectible:pickup`   | When the player walks over a collectible    | `{ playerId, collectibleId }`                                                                        |
 | `time:request`         | On connect, then every 60 s                 | _(no payload)_                                                                                       |
+| `wind:request`         | Optional — force a fresh `wind:state` reply | _(no payload)_                                                                                       |
 | `ping`                 | Every 5 s when connected                    | _(no payload)_                                                                                       |
 
 ## Type shapes
