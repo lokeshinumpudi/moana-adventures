@@ -69,20 +69,36 @@ curl http://localhost:3001/status
 
 ## Re-point the custom domain
 
-`socket.lokeshinumpudi.com` is currently fronted by Cloudflare pointing at the dead DO box. Two options:
+`lokeshinumpudi.com` is registered with **Namecheap** (BasicDNS — no Cloudflare proxy involved). Verify with:
 
-### Option A — keep Cloudflare (recommended; free TLS + DDoS)
+```bash
+dig +short NS lokeshinumpudi.com
+# → dns1.registrar-servers.com.
+#   dns2.registrar-servers.com.    (Namecheap)
+```
 
-1. Railway → Settings → Networking → **Custom Domain** → enter `socket.lokeshinumpudi.com`. Railway shows a CNAME target like `xyz.up.railway.app`.
-2. Cloudflare DNS → edit the `socket` CNAME record → point at the Railway target.
-3. Cloudflare → SSL/TLS → set mode to **Full (strict)** — Railway issues a real cert.
-4. **Important for WebSockets:** Cloudflare → Network → ensure **WebSockets = ON**. Without this, Socket.IO will fail to upgrade to WS (and may error out entirely).
-5. Wait for DNS propagation (usually <5 min). The 530 should clear immediately once the CNAME resolves to a live origin.
+The 530 you saw on `socket.lokeshinumpudi.com` was the **DigitalOcean App Platform** edge — same status code as Cloudflare's "origin unreachable" but a different provider. The CNAME pointed at a stopped DO app (`moana-socket-3j3fv.ondigitalocean.app`).
 
-### Option B — direct (no Cloudflare proxy)
+### Steps
 
-1. Cloudflare → set the `socket` record to **DNS only** (grey cloud) or remove it.
-2. Add the Railway-issued CNAME target directly at your registrar.
+1. **Register the custom domain on Railway** — prints the exact CNAME target:
+   ```bash
+   railway domain socket.lokeshinumpudi.com --port 3000
+   # → CNAME   socket   <hash>.up.railway.app
+   ```
+2. **Namecheap dashboard** → Domain List → `lokeshinumpudi.com` → **Manage** → **Advanced DNS**:
+   - Edit the existing CNAME record where Host = `socket`.
+   - Replace the Value (`moana-socket-3j3fv.ondigitalocean.app.`) with the `<hash>.up.railway.app.` Railway returned.
+   - TTL: Automatic.
+   - Save.
+3. **Wait 2–10 minutes** for Namecheap's TTL to expire and Railway to issue a Let's Encrypt cert against the new origin.
+4. **Verify**:
+   ```bash
+   dig +short socket.lokeshinumpudi.com cname
+   curl -sfI https://socket.lokeshinumpudi.com/status
+   ```
+
+No proxy = no WebSocket toggle, no SSL mode setting. TLS is terminated by Railway directly.
 
 ## Update the Vercel client
 
@@ -115,8 +131,8 @@ Or in the dashboard: Deployments → ⋯ → Redeploy on any past green build.
 
 | Symptom | Likely cause |
 | --- | --- |
-| 530 from `socket.lokeshinumpudi.com` | DNS still points at the dead DO box — update Cloudflare CNAME |
-| `polling` works, `websocket` upgrade fails | Cloudflare WebSockets toggle is off |
+| 530 from `socket.lokeshinumpudi.com` | DNS still points at the dead DO app — update Namecheap CNAME to the Railway target |
+| `SSL_ERROR` / cert mismatch right after CNAME swap | Let's Encrypt hasn't issued the cert yet — wait 2–10 min after DNS propagates |
 | `CORS error` in browser | `CORS_ORIGINS` env var on Railway is missing the Vercel domain |
 | Container crash-loops on boot | `railway logs` — usually a missing env var; pino logs the cause as `error` |
 | Build is slow / huge | Confirm `.dockerignore` is excluding `client/`; final image should be <200 MB |
