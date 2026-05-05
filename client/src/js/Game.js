@@ -268,10 +268,13 @@ export class Game {
     );
     this.camera.position.set(0, 20, 20);
 
-    // Renderer with cinematic tone mapping + linear color space
+    // Renderer with cinematic tone mapping + linear color space.
+    // logarithmicDepthBuffer stabilises Z precision at the horizon — without
+    // it, the ocean shader fights the sky at far distance and shimmers.
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance',
+      logarithmicDepthBuffer: true,
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1158,9 +1161,11 @@ export class Game {
       });
     }
 
-    // Update ocean
+    // Update ocean — pass camera position so the water plane follows us at
+    // a coarse grid. Avoids needing a 20km plane (which shimmers at the
+    // horizon) while keeping the illusion of an endless ocean.
     if (this.ocean) {
-      this.ocean.update(delta);
+      this.ocean.update(delta, this.camera.position);
     }
 
     // Update character

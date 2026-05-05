@@ -3,7 +3,14 @@ import { Water } from 'three/examples/jsm/objects/Water.js';
 
 export class Ocean {
   constructor() {
-    this.size = 20000;
+    // Match plane size to the camera's far plane (Game.js: far = 4000) so we
+    // never compute reflections for triangles the camera can't see anyway.
+    // The plane is repositioned to follow the camera each frame, so the
+    // player always sees water out to the horizon — see update().
+    this.size = 4000;
+    // Snap follow-position to a coarse grid so the normal-map UVs and the
+    // reflection target don't shimmer one pixel per frame as we drift.
+    this.followGridSize = 200;
     this.waveSpeed = 0.6;
     this.time = 0;
     this.mesh = null;
@@ -45,7 +52,9 @@ export class Ocean {
     }
     waterNormalTexture.wrapS = waterNormalTexture.wrapT = THREE.RepeatWrapping;
 
-    const waterGeometry = new THREE.PlaneGeometry(this.size, this.size, 64, 64);
+    // Single-quad plane — the Water shader doesn't displace vertices, so
+    // extra segments only added grazing-angle Z fighting at the horizon.
+    const waterGeometry = new THREE.PlaneGeometry(this.size, this.size, 1, 1);
 
     this.water = new Water(waterGeometry, {
       textureWidth: 512,
@@ -54,14 +63,16 @@ export class Ocean {
       sunDirection: this._sunDir.clone(),
       sunColor: 0xffffff,
       waterColor: 0x1a4d6b, // deeper, more cinematic blue
-      distortionScale: 5.5, // stronger reflections
+      distortionScale: 2.2,  // gentler than 5.5 — kills horizon shimmer
       fog: true,
     });
 
     this.water.rotation.x = -Math.PI / 2;
     this.water.position.y = 0;
-    this.water.receiveShadow = true;
-    this.water.renderOrder = -1;
+    // Don't force a render order; let the depth buffer sort. Also Water is a
+    // ShaderMaterial, not MeshStandardMaterial — `receiveShadow` causes the
+    // shadow-map projection pass to introduce per-frame artefacts.
+    this.water.receiveShadow = false;
 
     this.mesh = this.water;
     return true;
@@ -101,10 +112,23 @@ export class Ocean {
     return texture;
   }
 
-  update(delta) {
-    this.time += delta * this.waveSpeed;
-    if (this.water && this.water.material.uniforms) {
+  /**
+   * @param {number} delta seconds since last frame
+   * @param {THREE.Vector3} [cameraPos] if provided, the water plane snaps to
+   *   a coarse grid around it so the player sees an "infinite" ocean without
+   *   the plane being huge (which causes horizon Z shimmer at far distance).
+   */
+  update(delta, cameraPos) {
+    // Wrap time to avoid float32 precision rot in the wave shader after
+    // a few hours of play. 1000s is well past a full sail loop.
+    this.time = (this.time + delta * this.waveSpeed) % 1000;
+    if (this.water && this.water.material && this.water.material.uniforms) {
       this.water.material.uniforms.time.value = this.time;
+    }
+    if (cameraPos && this.water) {
+      const g = this.followGridSize;
+      this.water.position.x = Math.round(cameraPos.x / g) * g;
+      this.water.position.z = Math.round(cameraPos.z / g) * g;
     }
   }
 }
