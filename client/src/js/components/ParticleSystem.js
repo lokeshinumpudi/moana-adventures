@@ -35,12 +35,13 @@ export class ParticleSystem {
       blending: THREE.AdditiveBlending,
     });
 
-    // Muzzle flash material
+    // Muzzle flash material — bright enough to clip into bloom
     this.muzzleFlashMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff9933,
+      color: 0xfff0a0,
       transparent: true,
-      opacity: 0.8,
+      opacity: 1.0,
       blending: THREE.AdditiveBlending,
+      toneMapped: false, // blow past the tone map so bloom catches it
     });
 
     // Hit effect material
@@ -67,12 +68,14 @@ export class ParticleSystem {
       blending: THREE.AdditiveBlending,
     });
 
-    // Cannon fire material
+    // Cannon fire material — toneMapped:false lets the brightness blow
+    // through the ACES tone map and trigger the bloom pass
     this.cannonFireMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff5500,
+      color: 0xffaa33,
       transparent: true,
-      opacity: 0.9,
+      opacity: 1.0,
       blending: THREE.AdditiveBlending,
+      toneMapped: false,
     });
   }
 

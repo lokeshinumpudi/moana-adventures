@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Ship } from './components/Ship.js';
 import { Ocean } from './components/Ocean.js';
 import { Character } from './components/Character.js';
@@ -7,7 +11,6 @@ import { InputManager } from './utils/InputManager.js';
 import { SocketManager } from './SocketManager.js';
 import { ParticleSystem } from './components/ParticleSystem.js';
 import { Buoy } from './components/Buoy.js';
-import { SkyBox } from './components/SkyBox.js';
 import { Obstacle } from './components/Obstacle.js';
 import { HUD } from './components/HUD.js';
 import { Projectile } from './components/Projectile.js';
@@ -21,6 +24,7 @@ import { PhysicsManager } from './utils/PhysicsManager.js';
 import { SoundManager } from './utils/SoundManager.js';
 import { AudioControls } from './components/AudioControls.js';
 import { Weather } from './effects/Weather';
+import { WindRibbons } from './components/WindIndicator.js';
 
 export class Game {
   constructor(container) {
@@ -170,6 +174,10 @@ export class Game {
 
     // Weather system will be initialized after scene setup
     this.weather = null;
+
+    // Camera shake — pumped on cannon fire / explosions, decays over time
+    this._shakeIntensity = 0;
+    this._shakeOffset = new THREE.Vector3();
   }
 
   init() {
@@ -178,8 +186,9 @@ export class Game {
         // Set up Three.js scene
         this.setupScene();
 
-        // Initialize weather system after scene is set up
-        this.weather = new Weather(this.scene);
+        // Initialize weather system after scene is set up.
+        // Weather owns the sun/sky/fog and pushes sun direction to Ocean.
+        this.weather = new Weather(this.scene, this);
 
         // Set up input manager first
         this.inputManager = new InputManager(this);
@@ -212,6 +221,11 @@ export class Game {
           // Initialize particle system
           this.particleSystem = new ParticleSystem(this.scene);
 
+          // Ambient wind ribbons drift across the ocean in the current
+          // wind direction. Wind state arrives via SocketManager → this.wind.
+          this.windRibbons = new WindRibbons();
+          this.scene.add(this.windRibbons.group);
+
           // Initialize HUD
           this.hud = new HUD(this);
           
@@ -237,79 +251,60 @@ export class Game {
   }
 
   setupScene() {
-    // Create scene
+    // Create scene — fog/sky/lights are owned by Weather
     this.scene = new THREE.Scene();
 
-    // Add fog for performance and aesthetic reasons
-    this.scene.fog = new THREE.Fog(0x87ceeb, 70, 300);
-
-    // Create camera
+    // Camera
     this.camera = new THREE.PerspectiveCamera(
-      75,
+      72,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000,
+      4000,
     );
     this.camera.position.set(0, 20, 20);
 
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Renderer with cinematic tone mapping + linear color space
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor(0x87ceeb);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Add renderer to container
     this.container.appendChild(this.renderer.domElement);
 
-    // Add lights
-    this.addLights();
+    // Subtle bloom — bright additive particles (muzzle flash, explosions,
+    // sun glints on water) pop without washing out the scene.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.55, // strength
+      0.6, // radius
+      0.85, // threshold — only the brightest pixels bloom
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
 
-    // Add camera controls
+    // Camera controls (sun/lights now come from Weather)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.1;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
     this.controls.minDistance = 10;
     this.controls.maxDistance = 100;
-  }
-
-  addLights() {
-    // Main directional light (sun)
-    this.sunLight = new THREE.DirectionalLight(0xffffff, 1);
-    this.sunLight.position.set(100, 100, 100);
-    this.sunLight.castShadow = true;
-
-    // Set up shadow properties
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
-    this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 500;
-    this.sunLight.shadow.camera.left = -100;
-    this.sunLight.shadow.camera.right = 100;
-    this.sunLight.shadow.camera.top = 100;
-    this.sunLight.shadow.camera.bottom = -100;
-
-    // Add hemisphere light for ambient lighting
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x87ceeb, 0.6);
-
-    // Add lights to scene
-    this.scene.add(this.sunLight);
-    this.scene.add(hemiLight);
   }
 
   createComponents() {
     return new Promise((resolve, reject) => {
       try {
         Promise.all([
-        // Create skybox
-          new Promise(resolve => {
-            this.skybox = new SkyBox();
-            this.skybox.init().then(() => {
-              this.scene.add(this.skybox.mesh);
-              resolve();
-            });
-          }),
+          // Sky/sun/lights are owned by Weather (see effects/Weather.js).
 
           // Create ocean
           new Promise(resolve => {
@@ -344,6 +339,10 @@ export class Game {
           // Initialize particle system
           new Promise(resolve => {
             this.particleSystem = new ParticleSystem(this.scene);
+            if (!this.windRibbons) {
+              this.windRibbons = new WindRibbons();
+              this.scene.add(this.windRibbons.group);
+            }
             resolve();
           }),
 
@@ -737,10 +736,11 @@ export class Game {
       this.particleSystem.createCannonFire(projectileData.position);
     }
 
-    // Add sound effect
-    if (this.audioManager) {
-      this.audioManager.playSound('cannon', 0.7);
+    // Cannon recoil + camera kick
+    if (this.ship && this.ship.applyRecoil) {
+      this.ship.applyRecoil(side);
     }
+    this.triggerShake(0.5);
 
     // Notify SocketManager about the projectile
     if (this.socketManager) {
@@ -1016,12 +1016,11 @@ export class Game {
   }
 
   onWindowResize() {
-    // Update camera aspect ratio
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-
-    // Update renderer size
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
+    if (this.bloomPass) this.bloomPass.setSize(window.innerWidth, window.innerHeight);
   }
 
   animate() {
@@ -1182,6 +1181,11 @@ export class Game {
       this.particleSystem.update(delta);
     }
 
+    // Drift wind ribbons toward the current wind direction
+    if (this.windRibbons && this.ship && this.ship.mesh) {
+      this.windRibbons.update(delta, this.ship.mesh.position, this.wind);
+    }
+
     // Update buoys
     this.buoys.forEach(buoy => {
       buoy.update(delta);
@@ -1255,6 +1259,18 @@ export class Game {
 
     // Smoothly interpolate camera position
     this.camera.position.lerp(cameraTargetPosition, delta * 1.5);
+
+    // Decaying camera shake — additive to position after lerp
+    if (this._shakeIntensity > 0.001) {
+      const s = this._shakeIntensity;
+      this._shakeOffset.set(
+        (Math.random() - 0.5) * s,
+        (Math.random() - 0.5) * s * 0.6,
+        (Math.random() - 0.5) * s,
+      );
+      this.camera.position.add(this._shakeOffset);
+      this._shakeIntensity *= Math.max(0, 1 - delta * 4);
+    }
 
     // Look at the ship
     this.controls.target.copy(shipPosition);
@@ -1346,8 +1362,19 @@ export class Game {
   }
 
   render() {
-    // Render the scene
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  /**
+   * Pump the camera shake — used by cannon fire, explosions, hits.
+   * Decays in updateCamera; safe to call rapidly.
+   */
+  triggerShake(intensity = 0.6) {
+    this._shakeIntensity = Math.min(1.5, this._shakeIntensity + intensity);
   }
 
   checkPickupCollisions() {
@@ -1971,6 +1998,12 @@ export class Game {
 
     if (hitPosition && this.particleSystem) {
       this.particleSystem.createExplosion(hitPosition, 1.0);
+      // Camera shake scales with proximity to local ship
+      if (this.ship && this.ship.mesh) {
+        const dist = hitPosition.distanceTo(this.ship.mesh.position);
+        const proximity = Math.max(0, 1 - dist / 60);
+        if (proximity > 0) this.triggerShake(0.4 + 0.8 * proximity);
+      }
     }
 
     // Remove the projectile
