@@ -1,6 +1,6 @@
 # Docs index
 
-Authoritative reference for both humans and agents working in this repo.
+Canonical reference for both humans and agents working in this repo.
 
 | File                  | Read it for                                               |
 | --------------------- | --------------------------------------------------------- |
@@ -11,8 +11,11 @@ Authoritative reference for both humans and agents working in this repo.
 | `RUNBOOK.md`          | **Day-to-day commands** — run locally, build, deploy      |
 | `DEPLOYMENT.md`       | Vercel (client) + Railway (server) deploy and rollback    |
 | `DEBUGGING.md`        | Production incident playbook                              |
-| `vercel-debugging.md` | Vercel-specific ops + log retrieval                       |
-| `railway-deployment.md` | Railway migration runbook + Namecheap DNS swap          |
+
+## Supporting docs
+
+- `vercel-debugging.md` — Vercel-specific CLI/log appendix.
+- `railway-deployment.md` — historical Railway migration record from the DigitalOcean cutover. Do not treat it as the active deploy runbook.
 
 ## Existing planning docs (kept for context)
 
@@ -20,4 +23,4 @@ Authoritative reference for both humans and agents working in this repo.
   `refactoring-plan.md`, `testing-guide.md`, `testing-summary.md`,
   `test-implementation-summary.md` — historical planning notes.
 
-If those drift from the canonical docs above, the canonical docs win.
+If any supporting or planning doc drifts from the canonical docs above, the canonical docs win.

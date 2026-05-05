@@ -5,7 +5,7 @@ The client (`client/`) is deployed to Vercel — built from the monorepo root vi
 ## Quick links
 
 - Project: https://vercel.com/dashboard → `moana-adventures`
-- Production domain: https://moana-adventures.vercel.app (and https://pirates.lokeshinumpudi.com)
+- Production domain: https://pirates.lokeshinumpudi.com (alt: https://moana-adventures.vercel.app)
 - Build settings: governed by `vercel.json` at repo root — do **not** override in the Vercel UI unless you also delete the file.
 
 ## CLI setup

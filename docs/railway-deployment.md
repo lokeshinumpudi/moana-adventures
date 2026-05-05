@@ -1,6 +1,8 @@
-# Deploying the Socket Server to Railway
+# Railway Migration Notes (Historical)
 
-The Socket.IO server (`server/`) used to run on DigitalOcean. The DO instance was stopped, which is why `https://socket.lokeshinumpudi.com` currently returns Cloudflare **530** (origin unreachable). This doc walks through bringing the server back up on Railway and re-pointing the custom domain.
+> Historical reference only. The Railway migration is complete and the active deploy/runbook lives in `docs/DEPLOYMENT.md` and `docs/RUNBOOK.md`.
+
+The Socket.IO server (`server/`) used to run on DigitalOcean before the Railway migration. This document records the cutover procedure and the custom-domain repair steps that were used during that move.
 
 ## How the repo is wired for Railway
 

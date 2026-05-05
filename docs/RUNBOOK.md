@@ -101,11 +101,11 @@ See `docs/vercel-debugging.md` for full Vercel ops.
 
 ### Server → Railway
 
-- **Auto:** Railway GitHub integration deploys on push to `release` (root directory `server/`).
+- **Auto:** Railway GitHub integration deploys on push to `release` (service source root directory `/`, using the repo-root `Dockerfile`).
 - **Manual:** `yarn deploy:server` (alias for `railway up`).
 - **Image:** uses the repo-root `Dockerfile` (per `railway.json`). Health check is `GET /status`.
 - **Env:** set on Railway → Variables. Mirror `.env.production` (`NODE_ENV`, `CORS_ORIGINS`, `LOG_LEVEL`).
-- **Custom domain:** `socket.lokeshinumpudi.com` is registered at Railway and CNAME'd at **Namecheap** (no Cloudflare proxy). Until Railway has issued the cert for it, keep `VITE_SERVER_URL` pointed at the Railway-provided URL. See `docs/DEPLOYMENT.md` → "Custom domain" for the swap.
+- **Custom domain:** `socket.lokeshinumpudi.com` is the active production socket URL in `.env.production`. The Railway-generated hostname remains the fallback path for direct health checks or custom-domain incidents. See `docs/DEPLOYMENT.md` → "Custom domain" for repair/rebind steps.
 
 Rollback:
 
@@ -114,7 +114,7 @@ railway deployments
 railway rollback <id>
 ```
 
-See `docs/railway-deployment.md` for the full migration runbook.
+See `docs/DEPLOYMENT.md` for the active deploy runbook. `docs/railway-deployment.md` is historical migration context only.
 
 ### Docker (server, local or any container host)
 
@@ -125,10 +125,11 @@ yarn docker:run                       # honours .env
 
 ## Smoke tests after deploy
 
-`SERVER` below is whichever URL `VITE_SERVER_URL` currently uses (the Railway public URL or `socket.lokeshinumpudi.com` once its cert is live):
+`SERVER` below should normally be the production socket domain. Use the Railway-generated hostname only when bypassing the custom domain for diagnosis:
 
 ```sh
-SERVER=https://moana-server-production.up.railway.app   # or https://socket.lokeshinumpudi.com
+SERVER=https://socket.lokeshinumpudi.com
+# fallback: SERVER=https://moana-server-production.up.railway.app
 
 # Server health
 curl -i $SERVER/status
@@ -153,5 +154,5 @@ If anything goes red, jump to `docs/DEBUGGING.md` (production playbook).
 - Don't commit `.env` (only `.env.example`).
 - Don't hardcode the socket URL in `client/src/js/SocketManager.js` — read from `VITE_SERVER_URL`.
 - Don't widen `CORS_ORIGINS` to `*` in production.
-- Don't add a database/auth without an architecture discussion (see `CLAUDE.md`).
+- Don't add a database/auth without an architecture discussion (see `AGENTS.md` and `docs/ARCHITECTURE.md`).
 - Don't add a Cloudflare proxy in front of either subdomain without an explicit reason — the current stack is direct DNS → Vercel/Railway, and any proxy in between needs its own WebSocket-upgrade story.

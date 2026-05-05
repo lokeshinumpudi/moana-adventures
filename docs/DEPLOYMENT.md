@@ -4,8 +4,8 @@ Two independent deploys. Both are env-var driven (`.env` at repo root is the sou
 
 - **Client** → Vercel at `https://pirates.lokeshinumpudi.com` (alt: `moana-adventures.vercel.app`).
 - **Server** → Railway. Two URLs:
-  - `https://moana-server-production.up.railway.app` — Railway-provided, Railway-issued cert, **what `VITE_SERVER_URL` currently points at**.
-  - `https://socket.lokeshinumpudi.com` — custom domain, configured at Railway, CNAME'd at Namecheap. Cert issuance was still pending at last check; swap `VITE_SERVER_URL` over once it returns 200.
+  - `https://socket.lokeshinumpudi.com` — custom domain, CNAME'd at Namecheap, **what `VITE_SERVER_URL` points at in `.env.production`**.
+  - `https://moana-server-production.up.railway.app` — Railway-provided fallback hostname for direct health checks, rollback, or bypassing the custom domain.
 
 DNS for `lokeshinumpudi.com` lives at **Namecheap BasicDNS** — no Cloudflare proxy. TLS is terminated by Vercel and Railway directly.
 
@@ -50,8 +50,8 @@ Build is governed by `vercel.json` at repo root:
 
 Set under Production / Preview / Development scopes:
 
-- `VITE_SERVER_URL=https://moana-server-production.up.railway.app` *(current)*
-  Swap to `https://socket.lokeshinumpudi.com` once Railway has issued its cert for the custom domain.
+- `VITE_SERVER_URL=https://socket.lokeshinumpudi.com` *(current production value)*
+- Keep the Railway-generated URL available as a temporary fallback during DNS or certificate incidents.
 
 Redeploy after changing — Vercel does not hot-swap env into existing builds (`VITE_*` is inlined at build time).
 
@@ -107,6 +107,8 @@ Don't set `PORT` — Railway sets it.
 
 `lokeshinumpudi.com` is registered with Namecheap BasicDNS — there is no Cloudflare proxy, no SSL/TLS toggle, no WebSockets toggle.
 
+The custom socket domain is already the active production endpoint. Use the steps below when repairing the domain, rotating it to a new Railway-generated target, or recreating the mapping from scratch.
+
 ```sh
 dig +short NS lokeshinumpudi.com
 # dns1.registrar-servers.com.    (Namecheap)
@@ -129,9 +131,7 @@ To map `socket.lokeshinumpudi.com` to the Railway service:
    dig +short socket.lokeshinumpudi.com cname
    curl -sfI https://socket.lokeshinumpudi.com/status
    ```
-5. Swap Vercel `VITE_SERVER_URL` to `https://socket.lokeshinumpudi.com` and redeploy the client.
-
-Until the cert is live, keep `VITE_SERVER_URL` on the Railway-provided URL — it works immediately and uses the same CORS rules.
+5. Keep Vercel `VITE_SERVER_URL` on `https://socket.lokeshinumpudi.com`; only point it at the Railway-generated hostname temporarily if the custom domain is broken or mid-repair.
 
 ### Rollback
 
@@ -140,7 +140,7 @@ railway deployments
 railway rollback <id>
 ```
 
-Full Railway ops in `docs/railway-deployment.md`.
+Historical migration notes live in `docs/railway-deployment.md`; the active runbook is this file plus `docs/RUNBOOK.md`.
 
 ## Local Docker
 
@@ -154,7 +154,7 @@ curl http://localhost:3000/status
 
 `.github/workflows/ci.yml` runs on every PR + push to `release`:
 
-- **Build client** — `yarn install --frozen-lockfile` + `yarn build:client` with `VITE_SERVER_URL` set to the Railway URL.
+- **Build client** — `yarn install --frozen-lockfile` + `yarn build:client` with `VITE_SERVER_URL=https://socket.lokeshinumpudi.com`.
 - **Build server image** — Buildx with GHA cache → `docker build .` → boots the container and curls `/status` to assert the bundle actually runs (not just compiles).
 
 Don't gate Vercel/Railway auto-deploys on CI — they each have their own build/health checks. CI runs in parallel and catches what the platforms can't (server `/status` smoke test).
