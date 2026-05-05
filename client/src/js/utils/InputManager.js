@@ -81,18 +81,22 @@ export class InputManager {
     const fireControls = document.createElement('div');
     fireControls.className = 'fire-controls';
 
-    // Create cannon buttons
+    // Create cannon buttons (icons render on every device — labels are
+    // localised symbols rather than English so they read at a glance)
     this.fireButtons.left = document.createElement('div');
     this.fireButtons.left.className = 'fire-button left-cannon';
-    this.fireButtons.left.textContent = 'Left';
+    this.fireButtons.left.setAttribute('aria-label', 'Port cannon');
+    this.fireButtons.left.textContent = '◀';
 
     this.fireButtons.front = document.createElement('div');
     this.fireButtons.front.className = 'fire-button front-cannon';
-    this.fireButtons.front.textContent = 'Front';
+    this.fireButtons.front.setAttribute('aria-label', 'Bow chaser');
+    this.fireButtons.front.textContent = '▲';
 
     this.fireButtons.right = document.createElement('div');
     this.fireButtons.right.className = 'fire-button right-cannon';
-    this.fireButtons.right.textContent = 'Right';
+    this.fireButtons.right.setAttribute('aria-label', 'Starboard cannon');
+    this.fireButtons.right.textContent = '▶';
 
     // Add buttons to fire controls
     fireControls.appendChild(this.fireButtons.left);
@@ -444,207 +448,4 @@ export class InputManager {
     }
   }
 
-  setupMobileControls() {
-    // Create joystick container if it doesn't exist
-    let joystickContainer = document.getElementById('joystick-container');
-    if (!joystickContainer) {
-      joystickContainer = document.createElement('div');
-      joystickContainer.id = 'joystick-container';
-      document.getElementById('ui-layer').appendChild(joystickContainer);
-      
-      // Create outer ring
-      const joystickOuter = document.createElement('div');
-      joystickOuter.id = 'joystick-outer';
-      joystickContainer.appendChild(joystickOuter);
-      
-      // Create inner stick
-      const joystickInner = document.createElement('div');
-      joystickInner.id = 'joystick-inner';
-      joystickContainer.appendChild(joystickInner);
-    }
-    
-    // Create left button if it doesn't exist
-    let leftButton = document.getElementById('left-button');
-    if (!leftButton) {
-      leftButton = document.createElement('div');
-      leftButton.id = 'left-button';
-      leftButton.className = 'mobile-button';
-      leftButton.textContent = 'LEFT';
-      document.getElementById('ui-layer').appendChild(leftButton);
-    }
-    
-    // Create right button if it doesn't exist
-    let rightButton = document.getElementById('right-button');
-    if (!rightButton) {
-      rightButton = document.createElement('div');
-      rightButton.id = 'right-button';
-      rightButton.className = 'mobile-button';
-      rightButton.textContent = 'RIGHT';
-      document.getElementById('ui-layer').appendChild(rightButton);
-    }
-    
-    // Create front button if it doesn't exist
-    let frontButton = document.getElementById('front-button');
-    if (!frontButton) {
-      frontButton = document.createElement('div');
-      frontButton.id = 'front-button';
-      frontButton.className = 'mobile-button';
-      frontButton.textContent = 'FRONT';
-      document.getElementById('ui-layer').appendChild(frontButton);
-    }
-    
-    // Store references to the created elements
-    this.joystickContainer = joystickContainer;
-    this.joystickOuter = document.getElementById('joystick-outer');
-    this.joystickInner = document.getElementById('joystick-inner');
-    this.leftButton = leftButton;
-    this.rightButton = rightButton;
-    this.frontButton = frontButton;
-    
-    // Joystick state
-    this.joystickActive = false;
-    this.joystickTouchId = null;
-    this.joystickCenterX = 0;
-    this.joystickCenterY = 0;
-    this.joystickMoveX = 0;
-    this.joystickMoveY = 0;
-    
-    // Button touch states
-    this.leftButtonTouchId = null;
-    this.rightButtonTouchId = null;
-    this.frontButtonTouchId = null;
-    
-    // Set up event listeners for the joystick
-    const handleJoystickStart = (e) => {
-      // Check if we're already tracking a touch
-      if (this.joystickActive) return;
-      
-      const touch = e.changedTouches[0];
-      e.preventDefault();
-      
-      this.joystickActive = true;
-      this.joystickTouchId = touch.identifier;
-      
-      const rect = this.joystickContainer.getBoundingClientRect();
-      this.joystickCenterX = rect.left + rect.width / 2;
-      this.joystickCenterY = rect.top + rect.height / 2;
-      
-      // Move inner joystick to touch position
-      this.updateJoystickPosition(touch.clientX, touch.clientY);
-    };
-    
-    const handleJoystickMove = (e) => {
-      if (!this.joystickActive) return;
-      
-      // Find our touch
-      let touch = null;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === this.joystickTouchId) {
-          touch = e.changedTouches[i];
-          break;
-        }
-      }
-      
-      if (!touch) return;
-      e.preventDefault();
-      
-      // Update joystick position
-      this.updateJoystickPosition(touch.clientX, touch.clientY);
-    };
-    
-    const endJoystickTouch = (e) => {
-      if (!this.joystickActive) return;
-      
-      // Find our touch
-      let foundTouch = false;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === this.joystickTouchId) {
-          foundTouch = true;
-          break;
-        }
-      }
-      
-      if (!foundTouch) return;
-      e.preventDefault();
-      
-      // Reset joystick
-      this.joystickActive = false;
-      this.joystickTouchId = null;
-      this.joystickMoveX = 0;
-      this.joystickMoveY = 0;
-      
-      // Reset joystick position
-      this.joystickInner.style.transform = 'translate(-50%, -50%)';
-    };
-    
-    const handleButtonTouch = (button, action) => {
-      const startAction = (e) => {
-        e.preventDefault();
-        button.style.transform = button === this.frontButton ? 
-          'translateX(-50%) scale(0.95)' : 'scale(0.95)';
-        action(true);
-      };
-      
-      const endAction = (e) => {
-        e.preventDefault();
-        button.style.transform = button === this.frontButton ? 
-          'translateX(-50%)' : 'none';
-        action(false);
-      };
-      
-      button.addEventListener('touchstart', startAction);
-      button.addEventListener('touchend', endAction);
-      button.addEventListener('touchcancel', endAction);
-    };
-    
-    // Add event listeners
-    this.joystickContainer.addEventListener('touchstart', handleJoystickStart);
-    this.joystickContainer.addEventListener('touchmove', handleJoystickMove);
-    this.joystickContainer.addEventListener('touchend', endJoystickTouch);
-    this.joystickContainer.addEventListener('touchcancel', endJoystickTouch);
-    
-    // Set up button actions
-    handleButtonTouch(this.leftButton, (active) => {
-      this.keys.a = active;
-    });
-    
-    handleButtonTouch(this.rightButton, (active) => {
-      this.keys.d = active;
-    });
-    
-    handleButtonTouch(this.frontButton, (active) => {
-      this.keys.f = active;
-    });
-  }
-
-  updateJoystickPosition(touchX, touchY) {
-    if (!this.joystickActive || !this.joystickInner) return;
-    
-    // Calculate distance from center
-    const deltaX = touchX - this.joystickCenterX;
-    const deltaY = touchY - this.joystickCenterY;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
-    // Get joystick container radius
-    const containerRadius = this.joystickContainer.getBoundingClientRect().width / 2;
-    
-    // Limit distance to container radius
-    const limitedDistance = Math.min(distance, containerRadius);
-    
-    // Calculate normalized position (-1 to 1)
-    const normalizedX = distance > 0 ? (deltaX / distance) * limitedDistance : 0;
-    const normalizedY = distance > 0 ? (deltaY / distance) * limitedDistance : 0;
-    
-    // Apply normalized values to joystick movement (0.1 deadzone)
-    const deadzone = 10;
-    this.joystickMoveY = Math.abs(normalizedY) > deadzone ? -normalizedY / containerRadius : 0;
-    this.joystickMoveX = Math.abs(normalizedX) > deadzone ? normalizedX / containerRadius : 0;
-    
-    // Set keys based on joystick position
-    this.keys.w = this.joystickMoveY < -0.2;
-    this.keys.s = this.joystickMoveY > 0.2;
-    
-    // Move joystick inner
-    this.joystickInner.style.transform = `translate(calc(-50% + ${normalizedX}px), calc(-50% + ${normalizedY}px))`;
-  }
 }

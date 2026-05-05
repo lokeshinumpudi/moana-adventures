@@ -25,6 +25,7 @@ import { SoundManager } from './utils/SoundManager.js';
 import { AudioControls } from './components/AudioControls.js';
 import { Weather } from './effects/Weather';
 import { WindRibbons } from './components/WindIndicator.js';
+import { Onboarding } from './components/Onboarding.js';
 
 export class Game {
   constructor(container) {
@@ -226,6 +227,10 @@ export class Game {
           this.windRibbons = new WindRibbons();
           this.scene.add(this.windRibbons.group);
 
+          // First-run controls + mechanics overlay (press ? to reopen)
+          this.onboarding = new Onboarding(this);
+          if (this.onboarding.shouldShowOnLoad()) this.onboarding.show();
+
           // Initialize HUD
           this.hud = new HUD(this);
           
@@ -272,7 +277,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
