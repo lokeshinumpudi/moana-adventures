@@ -7,15 +7,27 @@
     "server"
   ],
   "scripts": {
+    "dev:client": "yarn workspace client dev",
+    "dev:server": "yarn workspace server dev",
     "dev": "yarn workspaces run dev",
-    "build:client": "yarn workspace client vite build --mode production",
     "build": "yarn workspace client vite build --mode production",
+    "build:client": "yarn workspace client vite build --mode production",
     "preview": "yarn workspace client vite preview",
     "start:client": "yarn workspace client dev",
     "start:server": "yarn workspace server start",
     "start": "yarn start:server",
+    "lint": "yarn workspace client lint",
+    "lint:fix": "yarn workspace client lint:fix",
+    "test": "yarn workspaces run test",
+    "test:client": "yarn workspace client test",
+    "test:server": "yarn workspace server test",
     "clean": "yarn workspaces run clean",
-    "test": "yarn workspaces run test"
+    "docker:build": "docker build -t moana-server .",
+    "docker:run": "docker run --rm -p 3000:3000 --env-file .env moana-server",
+    "deploy:client": "vercel --prod",
+    "deploy:server": "railway up --service moana-server",
+    "logs:client": "vercel logs --prod",
+    "logs:server": "railway logs"
   },
   "engines": {
     "node": ">=18.0.0"

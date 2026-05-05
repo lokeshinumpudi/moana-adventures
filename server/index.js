@@ -1,8 +1,21 @@
+const path = require('path');
+// Load shared monorepo-root .env (and NODE_ENV-specific override) so client + server share one config
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+if (process.env.NODE_ENV) {
+  require('dotenv').config({ path: path.resolve(__dirname, `../.env.${process.env.NODE_ENV}`), override: true });
+}
+
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const TimeManager = require('./src/timeManager');
+const logger = require('./src/logger');
+
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 const app = express();
 app.use(cors());
@@ -10,10 +23,8 @@ app.use(cors());
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? ["https://pirates.lokeshinumpudi.com","https://moana-adventures.vercel.app"]
-      : ["http://localhost:5174", "http://localhost:5173","*"],
-    methods: ["GET", "POST"]
+    origin: corsOrigins.length ? corsOrigins : true,
+    methods: ['GET', 'POST']
   }
 });
 
@@ -229,7 +240,7 @@ function generateIslands() {
     worldData.islands.push(island);
   }
   
-  console.log(`Generated ${worldData.islands.length} islands (${ADVERTISED_ISLANDS.advertisers.length} advertised)`);
+  logger.info({ count: worldData.islands.length, advertised: ADVERTISED_ISLANDS.advertisers.length }, 'islands generated');
 }
 
 // Generate collectibles on islands
@@ -274,7 +285,7 @@ function generateCollectibles() {
     }
   });
   
-  console.log(`Generated ${worldData.collectibles.length} collectibles`);
+  logger.info({ count: worldData.collectibles.length }, 'collectibles generated');
 }
 
 // Generate obstacles
@@ -317,7 +328,7 @@ function generateObstacles() {
     worldData.obstacles.push(obstacle);
   }
   
-  console.log(`Generated ${worldData.obstacles.length} obstacles`);
+  logger.info({ count: worldData.obstacles.length }, 'obstacles generated');
 }
 
 // Generate buoys (race track markers)
@@ -348,7 +359,7 @@ function generateBuoys() {
     worldData.buoys.push(buoy);
   }
   
-  console.log(`Generated ${worldData.buoys.length} buoys`);
+  logger.info({ count: worldData.buoys.length }, 'buoys generated');
 }
 
 // Initialize world
@@ -365,7 +376,7 @@ function initializeWorld() {
   generateObstacles();
   generateBuoys();
   
-  console.log("World generation complete!");
+  logger.info('world generation complete');
 }
 
 // Generate the world at server startup
@@ -495,17 +506,12 @@ function updateProjectilePhysics() {
 setInterval(updateProjectilePhysics, simulationInterval);
 
 io.on('connection', (socket) => {
-  console.log(`[${new Date().toISOString()}] Player connected:`, socket.id);
-  console.log('Total players:', io.engine.clientsCount);
-  
-  // Log client details
-  const clientInfo = {
-    id: socket.id,
+  logger.info({
+    socketId: socket.id,
+    totalPlayers: io.engine.clientsCount,
     transport: socket.conn.transport.name,
-    address: socket.handshake.address,
-    headers: socket.handshake.headers
-  };
-  // console.log('Client info:', clientInfo);
+    address: socket.handshake.address
+  }, 'player connected');
 
   // Handle ping requests
   socket.on('ping', () => {
@@ -514,8 +520,7 @@ io.on('connection', (socket) => {
 
   // Handle player join
   socket.on('player:join', (playerData) => {
-    console.log(`[${new Date().toISOString()}] Player joined:`, socket.id);
-    console.log('Player data:', playerData);
+    logger.info({ socketId: socket.id, playerData }, 'player joined');
     
     try {
       players.set(socket.id, {
@@ -532,11 +537,11 @@ io.on('connection', (socket) => {
       // Send existing players to the new player
       const existingPlayers = Array.from(players.values())
         .filter(player => player.id !== socket.id);
-      console.log('Sending existing players:', existingPlayers);
+      logger.debug({ socketId: socket.id, count: existingPlayers.length }, 'sending existing players');
       socket.emit('players:list', existingPlayers);
       
     } catch (error) {
-      console.error('Error handling player join:', error);
+      logger.error({ err: error, socketId: socket.id }, 'error handling player join');
     }
   });
 
@@ -629,7 +634,7 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('player:updated', broadcastState);
       }
     } catch (error) {
-      console.error('Error handling state update:', error);
+      logger.error({ err: error, socketId: socket.id }, 'error handling state update');
     }
   });
   
@@ -660,7 +665,7 @@ io.on('connection', (socket) => {
         velocity: projectileData.velocity
       });
     } catch (error) {
-      console.error('Error handling projectile fire:', error);
+      logger.error({ err: error, socketId: socket.id }, 'error handling projectile fire');
     }
   });
 
@@ -683,7 +688,7 @@ io.on('connection', (socket) => {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('Error handling explorer state update:', error);
+      logger.error({ err: error, socketId: socket.id }, 'error handling explorer state update');
     }
   });
   
@@ -728,14 +733,13 @@ io.on('connection', (socket) => {
         }
       }
     } catch (error) {
-      console.error('Error handling collectible pickup:', error);
+      logger.error({ err: error, socketId: socket.id }, 'error handling collectible pickup');
     }
   });
 
   // Handle disconnection
   socket.on('disconnect', (reason) => {
-    console.log(`[${new Date().toISOString()}] Player disconnected:`, socket.id);
-    console.log('Reason:', reason);
+    logger.info({ socketId: socket.id, reason }, 'player disconnected');
     
     // Remove all projectiles owned by this player
     for (const [id, projectile] of projectiles.entries()) {
@@ -747,12 +751,12 @@ io.on('connection', (socket) => {
     // Remove the player
     players.delete(socket.id);
     io.emit('player:left', socket.id);
-    console.log('Remaining players:', players.size);
+    logger.debug({ remainingPlayers: players.size }, 'players remaining');
   });
   
   // Handle errors
   socket.on('error', (error) => {
-    console.error('Socket error:', error);
+    logger.error({ err: error, socketId: socket.id }, 'socket error');
   });
 
   // Send world data to the client
@@ -761,8 +765,9 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
-  console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
-  console.log('Server configuration:', {
-    environment: process.env.NODE_ENV || 'development'
-  });
+  logger.info({
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    corsOrigins
+  }, 'server running');
 });

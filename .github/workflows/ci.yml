@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [release]
+  pull_request:
+    branches: [release]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Build client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build client
+        run: yarn build:client
+        env:
+          VITE_SERVER_URL: https://socket.lokeshinumpudi.com
+
+  server:
+    name: Build server image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: moana-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        run: |
+          docker run --rm -d --name moana-ci \
+            -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e CORS_ORIGINS=https://pirates.lokeshinumpudi.com \
+            -e LOG_LEVEL=info \
+            moana-server:ci
+          # wait for server to be ready (max ~10s)
+          for i in $(seq 1 10); do
+            if curl -fsS http://localhost:3000/status >/dev/null 2>&1; then
+              echo "server up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/status
+          docker logs moana-ci
+          docker stop moana-ci
