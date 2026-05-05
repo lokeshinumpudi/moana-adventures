@@ -23,7 +23,7 @@ They communicate over a single Socket.IO connection. There is no database; all w
 │            └── SocketManager (singleton) ──── Socket.IO ─────┐       │
 └──────────────────────────────────────────────────────────────┼───────┘
                                                                │
-              wss://moana-server-production.up.railway.app  (or socket.lokeshinumpudi.com)
+              wss://socket.lokeshinumpudi.com  (fallback: moana-server-production.up.railway.app)
                                                                │
 ┌──────────────────────────────────────────────────────────────┼───────┐
 │  Railway edge (TLS) → container (node :3000)                 │       │
@@ -44,14 +44,14 @@ They communicate over a single Socket.IO connection. There is no database; all w
 
 | Surface                       | URL                                                       | Notes                                                                           |
 | ----------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Client (prod)                 | `https://pirates.lokeshinumpudi.com`                      | Vercel; Namecheap CNAME `pirates` → `cname.vercel-dns.com.`                     |
-| Client (Vercel alt)           | `https://moana-adventures.vercel.app`                     | Allow-listed in server CORS                                                     |
-| Socket server (prod, current) | `https://moana-server-production.up.railway.app`          | Value of `VITE_SERVER_URL` today. Railway-issued cert, no proxy in front.       |
-| Socket server (custom domain) | `https://socket.lokeshinumpudi.com`                       | Namecheap CNAME `socket` → `7c0zi9hw.up.railway.app.`. Configured; swap `VITE_SERVER_URL` once Railway issues the cert. |
-| Client dev                    | `http://localhost:5173` / `:5174`                         | Vite dev server                                                                  |
-| Server dev                    | `http://localhost:3000`                                   | `yarn dev:server` (nodemon)                                                     |
+| Client (prod)             | `https://pirates.lokeshinumpudi.com`             | Vercel; Namecheap CNAME `pirates` → `cname.vercel-dns.com.`                    |
+| Client (Vercel alt)       | `https://moana-adventures.vercel.app`            | Allow-listed in server CORS                                                    |
+| Socket server (prod)      | `https://socket.lokeshinumpudi.com`              | Value of `VITE_SERVER_URL` in `.env.production`; Railway serves TLS directly.  |
+| Socket server (fallback)  | `https://moana-server-production.up.railway.app` | Railway-generated hostname; useful for direct health checks or bypassing DNS.  |
+| Client dev                | `http://localhost:5173` / `:5174`                | Vite dev server                                                                |
+| Server dev                | `http://localhost:3000`                          | `yarn dev:server` (nodemon)                                                    |
 
-The hostname the client uses is `import.meta.env.VITE_SERVER_URL` (read by `client/src/js/SocketManager.js` on boot — fail-loud if missing). The server CORS allow-list is `process.env.CORS_ORIGINS` (`server/index.js`). Changing either requires a coordinated change on both sides — see `docs/CONTRACTS.md` and `docs/DEPLOYMENT.md`.
+The hostname the client uses is `import.meta.env.VITE_SERVER_URL` (read by `client/src/js/SocketManager.js` on boot — fail-loud if missing). The committed production value is `https://socket.lokeshinumpudi.com`. The server CORS allow-list is `process.env.CORS_ORIGINS` (`server/index.js`). Changing either requires a coordinated change on both sides — see `docs/CONTRACTS.md` and `docs/DEPLOYMENT.md`.
 
 DNS reality check:
 
@@ -107,7 +107,7 @@ The server is **soft-authoritative**:
 - Collectible pickups, kills, and scores are server-authoritative.
 - Time-of-day is driven by `TimeManager` so all clients render the same dawn/dusk.
 
-This is intentional for a small project: it keeps the server cheap (a single t2.micro) while still preventing the worst forms of weapon abuse.
+This is intentional for a small project: it keeps the server cheap (a single small Railway instance) while still preventing the worst forms of weapon abuse.
 
 ### Client tick
 

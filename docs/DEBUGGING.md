@@ -2,7 +2,7 @@
 
 Production triage playbook. Each entry has: **symptom → fastest signal → likely cause → fix**. Order matches frequency.
 
-> Throughout this doc, `$SERVER` is whichever URL `VITE_SERVER_URL` currently uses — the Railway-provided URL (`https://moana-server-production.up.railway.app`) or `https://socket.lokeshinumpudi.com` once its cert is live. Set it once: `export SERVER=https://moana-server-production.up.railway.app`.
+> Throughout this doc, `$SERVER` should normally be the production socket domain: `https://socket.lokeshinumpudi.com`. Keep the Railway-generated hostname (`https://moana-server-production.up.railway.app`) as the direct-to-origin fallback when diagnosing DNS or custom-domain issues. Set it once: `export SERVER=https://socket.lokeshinumpudi.com`.
 
 ## Quick triage commands
 
@@ -43,7 +43,7 @@ If `/status` returns 200 and `connections > 0` while a tab is open, the wire is 
   ```sh
   curl -sI $SERVER/status
   ```
-  If this returns HTTP 000 / SSL verify failed, the browser is hitting a TLS error and *reporting* it as CORS. Common during the first few minutes after a custom-domain CNAME swap while Railway is provisioning the cert. Either wait it out or point `VITE_SERVER_URL` at the Railway-provided URL.
+  If this returns HTTP 000 / SSL verify failed, the browser is hitting a TLS error and *reporting* it as CORS. This most often happens during a recent CNAME change or certificate reprovision. Either wait it out or temporarily point `VITE_SERVER_URL` at the Railway-generated URL.
 - **If TLS is fine but CORS is genuinely missing**: the browser origin (e.g., a fresh Vercel preview URL) is not in `CORS_ORIGINS`.
   - **Fix**: add the origin to the Railway service env var (`CORS_ORIGINS` is comma-separated, no glob), then redeploy:
     ```sh
@@ -62,15 +62,15 @@ If `/status` returns 200 and `connections > 0` while a tab is open, the wire is 
     https://socket.lokeshinumpudi.com/status
   ```
   HTTP 000 + non-zero TLS verify = cert not ready.
-- **Fix**: keep `VITE_SERVER_URL` on the Railway-provided URL until `curl -sfI https://socket.lokeshinumpudi.com/status` returns 200. Then swap and redeploy the client. The Railway-issued cert auto-renews; nothing else to do.
+- **Fix**: temporarily move `VITE_SERVER_URL` to the Railway-generated URL until `curl -sfI https://socket.lokeshinumpudi.com/status` returns 200 again. Then switch back and redeploy the client. The Railway-issued cert auto-renews; nothing else to do.
 
 ## 4. Server returns 5xx through the socket URL but the Railway URL works
 
 - **Cause**: misconfigured custom domain on Railway, or the service crashed and Railway is restarting it.
 - **Signal**:
   ```sh
-  curl -sI https://moana-server-production.up.railway.app/status   # ground truth
-  curl -sI https://socket.lokeshinumpudi.com/status                 # custom domain
+  curl -sI https://socket.lokeshinumpudi.com/status                 # production path
+  curl -sI https://moana-server-production.up.railway.app/status    # direct Railway fallback
   ```
 - **Fix**:
   - If the Railway URL is also down, see § 5.

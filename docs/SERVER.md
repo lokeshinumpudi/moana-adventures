@@ -80,7 +80,7 @@ The server runs in a Docker container on Railway. Relevant files:
 - `railway.json` (repo root) — `builder: DOCKERFILE`, `healthcheckPath: /status`, `restartPolicyType: ON_FAILURE`.
 - `server/.ebextensions/`, `server/Procfile`, `server/readme.md` — historical AWS Elastic Beanstalk artefacts. Safe to ignore; do not extend.
 
-DNS for the custom domain `socket.lokeshinumpudi.com` is at **Namecheap** with no Cloudflare proxy. Railway issues and renews the TLS cert directly. See `docs/DEPLOYMENT.md` and `docs/railway-deployment.md`.
+DNS for the custom domain `socket.lokeshinumpudi.com` is at **Namecheap** with no Cloudflare proxy. Railway issues and renews the TLS cert directly. See `docs/DEPLOYMENT.md` for the active runbook; `docs/railway-deployment.md` is historical migration context only.
 
 ## Performance budget
 
