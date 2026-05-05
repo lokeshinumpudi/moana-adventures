@@ -1,16 +1,13 @@
-/**
- * Time Manager for the server
- * Handles time synchronization between clients
- */
+const logger = require('./logger');
+
 class TimeManager {
   constructor(io) {
     this.io = io;
     this.startTime = Date.now();
-    
-    // Set up socket event handlers
+
     this.setupSocketHandlers();
-    
-    console.log('TimeManager initialized');
+
+    logger.info('TimeManager initialized');
   }
   
   setupSocketHandlers() {

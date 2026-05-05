@@ -1,3 +1,14 @@
+> **Historical only — AWS Elastic Beanstalk era.**
+>
+> The server no longer runs on Elastic Beanstalk; it runs on Railway, built from the repo-root `Dockerfile`. The instructions below are kept for reference (in case anyone needs to understand why `.ebextensions/`, `Procfile`, or the `nginx + Let's Encrypt + Route 53` recipe exists in this repo).
+>
+> For current deploy and operations docs see:
+> - `docs/DEPLOYMENT.md`
+> - `docs/RUNBOOK.md`
+> - `docs/railway-deployment.md`
+
+---
+
 ## Deploy steps with ElasticBeanStalk
 
 - eb init -p node.js-22 moana-city --profile personal --region ap-south-1

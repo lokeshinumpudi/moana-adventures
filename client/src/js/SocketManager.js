@@ -54,10 +54,12 @@ export class SocketManager {
   }
 
   init() {
-    // Connect to the server
-    this.socket = io(process.env.NODE_ENV === 'production' ? 'https://socket.lokeshinumpudi.com' : 'http://localhost:3000');
+    const serverUrl = import.meta.env.VITE_SERVER_URL;
+    if (!serverUrl) {
+      throw new Error('VITE_SERVER_URL is not defined. Set it in the root .env file.');
+    }
+    this.socket = io(serverUrl);
 
-    // Set up socket event listeners
     this.setupSocketListeners();
   }
 
@@ -91,9 +93,9 @@ export class SocketManager {
         const serverTime = data.serverTime;
         const dayDuration = this.game.weather.dayDuration * 1000; // Convert to milliseconds
         const timeOfDay = (serverTime % dayDuration) / dayDuration;
-        
+
         console.log(`Received server time: ${new Date(serverTime).toISOString()}, timeOfDay: ${timeOfDay}`);
-        
+
         // Update weather system with server time
         this.game.weather.setTimeOfDay(timeOfDay);
         this.game.weather.lastUpdate = Date.now();
@@ -103,7 +105,7 @@ export class SocketManager {
     // Add ping handler
     this.socket.on('pong', () => {
       this.lastPing = Date.now() - this.pingStartTime;
-      
+
 
       // Schedule next ping
       setTimeout(() => {
